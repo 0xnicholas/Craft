@@ -373,3 +373,67 @@ impl Panel for FileBrowserPanel {
 | FileSystem dock | File Browser panel |
 | Output / Debugger | Error Panel (structured errors in a table) |
 | No agent integration | Agent Copilot panel (ADR 0019) |
+
+## Appendix A: Lua Script Editor (formerly ADR 0020)
+
+The Lua Editor is the Craft equivalent of Godot's Script Editor, providing syntax highlighting, auto-complete (Lua stdlib + engine API), go-to-definition, and inline diagnostics.
+
+**LSP Architecture**: The editor spawns a Lua Language Server (LuaLS/sumneko-lua) subprocess communicating via stdin/stdout JSON-RPC 2.0. Engine API types are injected as a workspace file:
+
+```lua
+-- .craft/engine_types.lua (auto-generated from craft-schema, in LuaLS workspace)
+--- @class Node
+--- @field position Vec2
+--- @field hp integer
+local Node = {}
+--- @class Engine
+--- @field get_node fun(id: string): Node | nil
+--- @field emit fun(signal: string, args: table)
+--- @field call_system fun(name: string, args: table): any
+local Engine = {}
+```
+
+This stub is regenerated when `engine.getSchema()` changes. LuaLS picks it up and provides auto-complete for `engine.*`, `node.position`, etc.
+
+**Syntax highlighting**: Regex-based (keywords blue, strings green, engine API teal, comments gray). Tree-sitter deferred to v3.
+
+**Hot reload on save**: Ctrl+S triggers `engine.reload_lua_module(path)` — re-requires the Lua module in the engine's VM. Compile errors show as diagnostics (red squiggles). Runtime errors appear in Error Panel mapped to source file + line.
+
+## Appendix B: Editor UX Specification (formerly ADR 0021)
+
+### Visual Design
+
+Dark theme: `#1e1e1e` base, `#252526` panels, `#007acc` accent. JetBrains Mono 13px for code/terminal, system sans-serif for UI. Node type icons: geometric shapes + color (■ node, ▶ 2D, ● 3D, ◆ GUI, ⚡ transient).
+
+### Keyboard Shortcuts (aligned with Godot)
+
+| Scope | Key | Action |
+|-------|-----|--------|
+| File | Ctrl+S | Save + trigger hot reload |
+| Scene | F5/F8 | Run/Stop |
+| Scene | F10 | Step one tick |
+| Scene | Ctrl+Shift+A | Add child node |
+| View | Ctrl+1-5 | Switch panel (1=Scene, 2=Inspector, 3=Terminal, 4=Files, 5=Agent) |
+| Edit | Ctrl+Z/Ctrl+Shift+Z | Undo/Redo (per-SceneDef, 100 levels) |
+
+### Drag & Drop
+
+Scene tree: drag to reparent/reorder. File browser: drag .lua onto node → sets lua_class. Drag .json → opens in editor. Invalid drops show forbidden cursor.
+
+### Context Menus
+
+Node: Add Child, Duplicate, Rename, Attach/Detach Lua, Delete. File: Open, New (Scene/Lua/Behavior/Resource), Delete. Folder: New File, New Folder, Delete.
+
+### Workflows
+
+1. **New project**: Create craft.toml + dirs → new scene.json → add nodes → set components → attach Lua → F5 preview
+2. **Agent co-authoring**: Ctrl+` → type request → Agent proposes diff → preview → accept/modify/reject
+3. **Replay debugging**: Load recording → scrub timeline → inspect state at any tick → identify divergence
+4. **Hot reload iteration**: F5 run → edit files → Ctrl+S → instant apply, no restart
+5. **Agent debugging**: Error occurs → click [Ask Agent to Fix] → Agent reads error + source + replay context → proposes fix → review accept
+
+### UX Compared to Godot
+
+**Copied**: Scene dock + Inspector split, F5/F8 muscle memory, dark theme, file system drag-drop, Ctrl+Z undo.
+
+**Improved over Godot**: Agent Copilot (no AI in Godot), replay scrubber + state diff (Godot has no native replay), schema-powered LSP auto-complete (Godot: manual docs), structured error suggestions (Godot: parse stderr), hot reload preserves Lua state (Godot: script variables may reset).

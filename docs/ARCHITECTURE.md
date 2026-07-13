@@ -12,9 +12,9 @@ Three subsystems, built in dependency order:
 
 | Subsystem | Milestone | Crate(s) | ADRs |
 |-----------|----------|----------|------|
-| **Engine Core** | v1 | `craft-kernel`, `craft-schema`, `craft-replay`, `craft-bridge`, `craft-terminal` | 0001-0015 |
+| **Engine Core** | v1 | `craft-kernel`, `craft-schema`, `craft-replay`, `craft-bridge`, `craft-terminal` | 0001-0010, 0015 |
 | **Lua Scripting** | v1 | `craft-lua` | 0016 |
-| **Editor** | v2 | `craft-editor` | 0017-0021 |
+| **Editor** | v2 | `craft-editor` | 0017-0019 |
 
 ## System Architecture
 
@@ -168,25 +168,19 @@ All engine errors are JSON with `file`, `json_path`, `expected_type`, `actual_va
 |-----|-------|-------------|
 | 0001 | Crate Structure | 6-crate workspace: kernel, lua, schema, replay, bridge, terminal |
 | 0002 | Node Model | Property-bag + tree; no inheritance; SlotMap generational indices |
-| 0003 | Behavior Runtime | Two-tier: Lua direct + JSON command buffer; evaluate → apply pipeline |
+| 0003 | Behavior Runtime | Two-tier: Lua + JSON; command buffer + expressions + system registry + input model |
 | 0004 | Render Trait | 4-method trait; ComponentView iterator; NullRenderer for testing |
 | 0005 | Schema Pipeline | schemars + craft-schema extensions; JSON Schema → TS types |
 | 0006 | Replay System | Per-tick hash recording; deterministic re-run; resource snapshots |
-| 0007 | Bridge Layer | Sync NAPI + JSON-RPC dispatcher; transport trait for v2 WebSocket |
+| 0007 | Bridge Layer | Sync NAPI + JSON-RPC; transport trait; AI-native primitives (lint, dryRun, explain, diff) |
 | 0008 | Error Handling | Structured JSON errors; bulk collection; actionable suggestions |
 | 0009 | Hot Reload | File watcher → diff → hot-patch; stale resource semantics |
 | 0010 | Testing | Four-layer pyramid: unit, replay regression, agent benchmarks, integration |
-| 0011 | Expression Vocabulary | 7 operators: ref, eq, neq, lt, gt, add, sub |
-| 0012 | System Registry | craft_system! macro; pure/impure distinction; schema auto-generation |
-| 0013 | Input Model | InputBus → Input node; frame-latched; replay-compatible |
-| 0014 | AI-Native Primitives | lint, dryRun, explain, diff; schema-exposed |
 | 0015 | Performance Budgets | 8 committed targets: ≤8ms tick, ≤100ms hot reload, ≤5s replay |
 | 0016 | Lua Scripting | Lua 5.5 via mlua; first-class scripting; GDScript parity |
 | 0017 | Editor Architecture | egui + eframe embedded; file-based editing; PRD v2 deviation |
-| 0018 | Editor Panels | Scene Tree, Inspector, Behavior Editor, Terminal Preview, File Browser |
+| 0018 | Editor Panels & UX | Scene Tree, Inspector, Behavior Editor, Terminal, File Browser, Lua Editor, UX spec |
 | 0019 | Agent Copilot | Sidebar panel; context injection; diff review flow |
-| 0020 | Lua Script Editor | LuaLS via LSP; engine type stubs; hot reload on save |
-| 0021 | Editor UX | Visual language, shortcuts, drag-drop, 5 authoring workflows |
 
 ## Key Design Principles
 

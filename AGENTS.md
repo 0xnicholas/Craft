@@ -6,7 +6,7 @@ Behavioral guidelines and project context for AI agents working on Craft.
 
 **Craft** is an AI-native game engine in Rust. It uses Godot's architecture (scene tree, signals, resources) as a design reference but reimagines every subsystem through Rust idioms.
 
-- **Docs**: `docs/ARCHITECTURE.md` (system design), `docs/superpowers/specs/` (PRD), `docs/adr/` (21 architecture decision records)
+- **Docs**: `docs/ARCHITECTURE.md` (system design), `docs/superpowers/specs/` (PRD), `docs/adr/` (15 architecture decision records)
 - **Reference**: Godot 4.x source in `_references/godot-master/` (read-only, do not modify)
 - **Godot root at:** `_references/godot-master/`
 
@@ -49,7 +49,7 @@ These reflect decisions in `docs/adr/`. Do not reverse them without writing a ne
 | Hot reload is the default authoring loop — not an afterthought | 0009 |
 | Engine is single-threaded for v1 — no async, no concurrency | 0015 |
 | Tick budget ≤8ms for tower_defense scene | 0015 |
-| Editor is v2 — do not implement editor features in v1 engine crates | 0017-0021 |
+| Editor is v2 — do not implement editor features in v1 engine crates | 0017-0019 |
 
 ## File Layout Rules
 

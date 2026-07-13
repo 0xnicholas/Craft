@@ -103,3 +103,20 @@ v1 runs the agent and engine in the same Node.js process. IPC is unnecessary ove
 | ClassDB → runtime method lookup | Schema → compile-time TS type generation |
 | Editor calls C++ directly | Agent calls TS SDK → NAPI → Rust |
 | `Variant` serialization (proprietary) | JSON (schema-validated, standard) |
+
+## Appendix: AI-Native Primitives (formerly ADR 0014)
+
+The bridge exposes four agent-native primitives that make the engine "meaningfully more AI-native" (PRD §8.4):
+
+| Primitive | Signature | Purpose |
+|-----------|-----------|---------|
+| `lint(scene)` | SceneDef → LintReport | Static analysis: signal wiring, state reachability, unused components, undefined refs. 6 rules. |
+| `dryRun(nodeId, actions)` | NodeId × Action[] → ComponentDiff | Hypothetical execution in sandbox. Signals discarded, impure systems rejected. No side effects. |
+| `explain(nodeId)` | NodeId → NodeExplanation | Structured node description optimized for LLM context windows (summary + components + state + children). |
+| `diff(tickA, tickB)` | u32 × u32 → SnapshotDiff | Compare two recorded ticks. Component changes, node creations/destructions, signal emissions. |
+
+**`dryRun` guardrails**: Uses a cloned read-only tree + write-tracked buffer. Signals emitted during dry run are discarded. Impure `call_system` is rejected. State hash unchanged after dry run — guaranteeing no side effects.
+
+**`lint` is static**: Operates on parsed `SceneDef` before loading into `SceneTree`. Pure function, no tick loop needed.
+
+All four primitives are schema-exposed via `engine.getSchema().primitives`, so the agent's TS types auto-generate and cannot drift.

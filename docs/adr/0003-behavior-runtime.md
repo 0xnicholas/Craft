@@ -199,3 +199,36 @@ PRD §7.4 states: "Node A cannot directly `set_state` node B's component." The r
 | GDScript for game logic | Lua 5.5 (Tier 1) for humans, JSON 9 verbs (Tier 2) for agents |
 | GDScript `await` / `yield` | Lua coroutines + `engine.wait_ticks(N)` + `engine.start_coroutine(fn)` |
 | `extends Node2D` / `class_name Enemy` | `lua_class: "scripts.classes.enemy"` in scene JSON |
+
+## Appendix A: Expression Vocabulary (formerly ADR 0011)
+
+Actions use a closed set of 7 structured expression operators (PRD §6.5):
+
+| Operator | JSON | Semantics |
+|----------|------|-----------|
+| `ref` | `{ "ref": "node.key" }` or bare string `"self.position"` | Read a component value |
+| `eq` | `{ "eq": [a, b] }` | Equality comparison |
+| `neq` | `{ "neq": [a, b] }` | Inequality |
+| `lt` | `{ "lt": [a, b] }` | Less-than |
+| `gt` | `{ "gt": [a, b] }` | Greater-than |
+| `add` | `{ "add": [a, b] }` | Numeric addition |
+| `sub` | `{ "sub": [a, b] }` | Numeric subtraction |
+
+Bare strings like `"self.position"` are sugar for `{ "ref": "self.position" }`. Reserved tokens: `self`, `none`, `true`, `false`, numeric/string literals. Expressions are type-checked at evaluation time. Boolean operators (`and`/`or`/`not`) are handled by `if` nesting and guard composition, not expression operators. The vocabulary is exposed via `engine.getSchema().expressions`.
+
+## Appendix B: System Registry (formerly ADR 0012)
+
+The `call_system` action invokes Rust functions registered via the `craft_system!` proc-macro. Systems are pure by default; impure systems are marked `#[impure]`.
+
+**Pure systems**: Execute during evaluate phase with read-only tree access. Safe for `dryRun`.
+**Impure systems**: Deferred to apply phase. Receive `ctx.commands` buffer to push mutations (SpawnNode, DestroyNode, SetComponent).
+
+The macro auto-generates: (1) `System` trait impl, (2) JSON Schema for args and return type, (3) registration into global `SystemRegistry`. Systems are accessible to agents via `engine.listSystems()` and `engine.getSystemSchema(name)`. Unlike GDExtension's C ABI, systems are Rust functions in the same binary — zero FFI overhead, zero ABI compatibility concerns, compile-time registration.
+
+## Appendix C: Input Model (formerly ADR 0013)
+
+A single built-in `Input` node (id=`_input`) carries the current input frame as components (`direction`, `action`, `actions`, `mouse_pos`, `mouse_down`). The `InputBus` populates it at the start of each tick (step 1 in the tick loop).
+
+Input sources: terminal keyboard (craft-terminal calls `InputBus::press_action()`), agent RPC (`engine.setInput()`), or replay (`ReplayRunner` feeds recorded `InputFrame`). Input is frame-latched — all behaviors in the same tick see the same input frame.
+
+This replaces Godot's distributed `Input` singleton + `_input(event)` callback model, enabling deterministic replay by recording `InputFrame` per tick.

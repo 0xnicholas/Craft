@@ -49,9 +49,9 @@ docs/
 ├── superpowers/specs/
 │   └── 2026-07-09-craft-prd.md  # Product requirements
 └── adr/
-    ├── 0001-0015.md             # Engine core architecture (v1)
+    ├── 0001-0010.md + 0015.md   # Engine core architecture (v1)
     ├── 0016.md                  # Lua scripting
-    └── 0017-0021.md             # Editor architecture + UX (v2)
+    └── 0017-0019.md             # Editor architecture + panels + Copilot (v2)
 
 crates/                          # (planned, not yet scaffolded)
 ├── craft-kernel/                # Engine core
@@ -86,16 +86,16 @@ games/
 |----------|---------|
 | `docs/ARCHITECTURE.md` | System overview, crate DAG, key patterns, Godot comparison |
 | `docs/superpowers/specs/...-prd.md` | Product requirements, v1 goals, success criteria |
-| `docs/adr/0001-0015.md` | Engine core: node model, behavior runtime, schema, replay, bridge, testing |
+| `docs/adr/0001-0010.md + 0015.md` | Engine core: node model, behavior runtime, schema, replay, bridge, error handling, testing, performance |
 | `docs/adr/0016.md` | Lua 5.5 scripting: two-tier behavior model, mlua bindings, GDScript parity |
-| `docs/adr/0017-0021.md` | Editor: egui architecture, panels, Copilot, Lua editor, UX specification |
+| `docs/adr/0017-0019.md` | Editor: egui architecture, panels + UX, Copilot collaborative editing |
 
 ## Status
 
 **Pre-implementation — architecture design phase.**
 
 - [x] Product requirements (PRD)
-- [x] Architecture decision records (21 ADRs)
+- [x] Architecture decision records (15 ADRs)
 - [x] Overarching system design (ARCHITECTURE.md)
 - [ ] Engine core implementation (v1)
 - [ ] Reference game: tower defense
