@@ -25,6 +25,8 @@ PRD §10.0 defines concrete performance targets. These are not aspirations — t
 | Replay of 1,000 ticks | ≤ 5 s wall clock | 5ms/tick average. Replay must be faster than real-time (16.67ms/tick) |
 | Cold start (binary to first tick) | ≤ 500 ms | Scene parse + validate + load. No GPU init. JSON-only. |
 | `engine.getSchema()` latency | ≤ 50 ms | Cached after first call. Subsequent calls return `OnceLock` value. |
+| Schema validation latency (1,000-node scene, full validation) | ≤ 200 ms | All validation errors collected before returning (ADR 0008). Budget applies to `engine.validateScene()` and implicit validation during `engine.start()`. Agent may call `lint()` + `dryRun()` in a tight loop; validation must not be the bottleneck. |
+| `engine.lint()` latency (1,000-node scene) | ≤ 50 ms | Static analysis only — no tick execution. Must be fast enough for agent to call before every `dryRun`. |
 
 ### Design Implications
 
@@ -60,6 +62,11 @@ PRD §10.0 defines concrete performance targets. These are not aspirations — t
 - Replay skips hot-reload polling
 - 1,000 ticks × 5ms = 5s wall clock (vs 16.67s if running at 60Hz with rendering)
 - Input replay feed is O(1) per tick (look up frame by tick index)
+
+**7. Schema validation**:
+- Bulk error collection (ADR 0008) means validation runs to completion even after finding errors — must complete within 200ms for 1,000 nodes
+- Validation is CPU-bound (JSON parsing + jsonschema traversal). Use `jsonschema` crate with pre-compiled schema — compile once at engine init, reuse per-validation
+- Lint is a subset of validation (no JSON parse, only AST traversal). 50ms budget is aggressive but achievable with cached lookups (pre-computed signal subscriber index, state machine reachability cache)
 
 ### Profiling and Enforcement
 

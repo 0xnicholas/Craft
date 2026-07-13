@@ -99,6 +99,22 @@ Any hash mismatch is a **determinism bug** — tracked and fixed before v1 ships
 | Resource resolution | `ResourceRef` stores `snapshot_version`. Replay uses recorded version, not current. |
 | Tick rate | Recording stores `tick_rate`. Replay runs at recorded rate regardless of `setTickRate()`. |
 
+## Replay × Hot Reload — Cross-System Semantics
+
+Hot reload (ADR 0009) and deterministic replay are orthogonal systems that intersect when a recording spans a hot reload boundary.
+
+**v1 decision: Replay does NOT cross hot reload boundaries.** If a recording captured ticks 0-1000 and a hot reload occurred at tick 500, replay is only valid for tick ranges that share the same scene snapshot:
+
+| Tick range | Scene version | Replayable? |
+|------------|--------------|-------------|
+| 0-499 | scene_v1.json (pre-reload) | Yes — replay from tick 0 with scene_v1 snapshot |
+| 500-1000 | scene_v2.json (post-reload) | Yes — replay from tick 500 with scene_v2 snapshot + accumulated state |
+| 0-1000 | Two different scenes | **No** — cross-patch replay is a v1 non-goal |
+
+**Rationale**: Cross-patch replay requires the recording to embed the full "patch manifest" (what changed, at which tick, the old and new scene files, the old and new Lua scripts). The replay engine would need to stop at tick 500, apply the patch, verify the state hash, then continue. This is feasible but complex — deferred to v2. ADR 0009 is updated to note this constraint.
+
+**v2 goal (explicitly deferred)**: Recordings embed `PatchEntry { tick, diff, old_scene_hash, new_scene_hash }`. Replay engine pauses at patch ticks, applies the diff, verifies the hash match, then continues.
+
 ## Agent Use Cases
 
 1. **Counterfactual reasoning**: "Change the `enemy_spawner` state machine transition from `every_60_ticks` to `every_30_ticks`, replay the same recording, compare the state diffs at tick 500."

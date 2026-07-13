@@ -57,6 +57,34 @@ The trait is defined in `craft-kernel`. `craft-terminal` is the v1 implementatio
 | Draw lists, passes, compositor effects | Raw character grid → ANSI escape codes |
 | Multi-threaded render thread | Single-threaded (v1 invariant) |
 
+## Extension Seam — `RenderCapabilities` for v2
+
+The 4-method trait will break when v2 adds 2D/3D rendering. To avoid a breaking change, the trait includes a **capability query** from v1:
+
+```rust
+pub trait Render: Send {
+    fn render(&mut self, components: &[ComponentView], tick: u64);
+    fn viewport(&self) -> Viewport;
+    fn resize(&mut self, viewport: Viewport);
+    fn shutdown(&mut self);
+
+    /// Returns the set of rendering features this backend supports.
+    /// Terminal backend returns TEXT only. GPU backend returns TEXTURE, SHADER, etc.
+    fn capabilities(&self) -> RenderCapabilities { RenderCapabilities::TEXT }
+}
+
+bitflags! {
+    pub struct RenderCapabilities: u32 {
+        const TEXT    = 1 << 0;  // ANSI/character rendering (all backends)
+        const SPRITE  = 1 << 1;  // 2D sprite rendering (v2)
+        const SHADER  = 1 << 2;  // Custom shader support (v2)
+        const MESH    = 1 << 3;  // 3D mesh rendering (v3)
+    }
+}
+```
+
+The engine queries `capabilities()` to decide which scene nodes to feed to the renderer. If a backend declares `SPRITE`, the engine includes sprite draw data alongside `ComponentView`. If not, it skips them. This keeps the 4 core methods stable while letting backends declare what they support — no trait method explosion, no breaking change.
+
 ## Rejected Alternatives
 
 ### Abstract trait from v1 with canvas/scene/overlay layers

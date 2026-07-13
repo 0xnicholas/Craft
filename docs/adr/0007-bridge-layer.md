@@ -101,8 +101,23 @@ v1 runs the agent and engine in the same Node.js process. IPC is unnecessary ove
 | C# via Mono embedding | TypeScript via napi-rs |
 | `core/extension/` C ABI + compatibility hash | NAPI (platform-standard, maintained by napi-rs) |
 | ClassDB → runtime method lookup | Schema → compile-time TS type generation |
-| Editor calls C++ directly | Agent calls TS SDK → NAPI → Rust |
+| Editor calls C++ directly | Agent calls TS SDK → NAPI → Rust; Editor calls Rust directly (ADR 0017) |
 | `Variant` serialization (proprietary) | JSON (schema-validated, standard) |
+
+## Dual Transport, Single Semantic API
+
+Design principle #1 states "no bifurcated API surface." More precisely: Craft has **one semantic `Engine` API** with two transport protocols:
+
+| Aspect | Agent path (bridge) | Editor path (embedded) |
+|--------|--------------------|-----------------------|
+| Transport | Sync NAPI + JSON-RPC | Direct Rust function call |
+| Serialization | JSON round-trip on every call | None (same process, same types) |
+| Error granularity | Structured `EngineError` JSON — bulk collection, all fields | Same `EngineError` type, but can panic in development (editor catches panics) |
+| Batch operations | JSON-RPC batch mode: array of requests, array of responses | Native Rust iterator: `engine.tick_batch(100)` |
+| Schema access | `engine.getSchema()` returns JSON | Same function, returns `serde_json::Value` |
+| Concurrency | Single-threaded, sync NAPI on V8 main thread | Single-threaded, called from egui main loop |
+
+Both paths call the **same** `Engine` methods. Types, validation, error codes, and behavior are identical. The transport difference is an implementation detail, not a semantic fork.
 
 ## Appendix: AI-Native Primitives (formerly ADR 0014)
 

@@ -44,7 +44,23 @@ pub struct ValidationError {
     pub message: String,
     pub expected_type: String,
     pub actual_value: Option<Value>,
-    pub suggestion: Option<String>,       // actionable fix, e.g. "Replace with a number like 100"
+    pub suggestion: Option<String>,       // accessible fix, e.g. "Replace with a number like 100"
+    pub auto_fixable: AutoFix,            // whether the agent can safely auto-apply the fix
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub enum AutoFix {
+    /// Safe to auto-fix: the fix is unambiguous and reversible.
+    /// Example: missing required field with a default value — fill in the default.
+    Safe,
+
+    /// Fix has low ambiguity but human review recommended.
+    /// Example: type mismatch with a clear coercion (string "5" → integer 5).
+    Suggested,
+
+    /// Fix requires human judgment — multiple valid interpretations.
+    /// Example: unknown component key "posiiton" — did they mean "position"?
+    NeedsReview,
 }
 
 pub struct RuntimeError {

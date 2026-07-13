@@ -23,11 +23,14 @@ Both tiers coexist per-node. Execution order: Lua hooks → JSON rules.
 tick N:
   1. InputBus populates Input node's components
   2. Fire reserved "tick" signal
-  3. LUA PRE-PASS (direct mutation):
-     For each node with a lua_class, in declaration order:
-       a. Call lua_instance:on_tick()    — reads/writes components directly
-       b. Call lua_instance:on_signal()  — for signals queued before this tick
-     Lua mutations are immediately visible to subsequent steps in the same tick.
+   3. LUA PRE-PASS (direct mutation):
+      For each node with a lua_class, in **scene tree depth-first declaration order**
+      (stable, same order as JSON evaluation — see ADR 0002 for SlotMap insertion-order
+      guarantee). Within a single node, Lua hooks execute in this fixed order:
+        a. on_spawn()  — only on the tick the node is first created
+        b. on_signal() — for signals queued before this tick
+        c. on_tick()   — main per-frame hook
+      Lua mutations are immediately visible to subsequent steps in the same tick.
   4. JSON EVALUATE phase (READ-ONLY):
      For each node in declaration order:
        a. State machine: evaluate transitions triggered by tick/queued signals
@@ -170,6 +173,18 @@ PRD §7.4 states: "Node A cannot directly `set_state` node B's component." The r
 - State machine transition actions within `on_tick`-triggered transitions: same restriction as `on_tick`
 - State machine transition actions within signal-triggered transitions: same freedom as `on_signal`
 
+## Lua Determinism Lock — Three Independent Switches
+
+The "optional lock-on-record" for Lua scripts (ADR 0016) decomposes into three orthogonal controls. Treating them as a single toggle makes determinism bugs hard to diagnose:
+
+| Switch | What it controls | Failure mode if misconfigured |
+|--------|-----------------|------------------------------|
+| **RNG lock** | Replaces `math.random()` with `engine.rng()`. Lua's own RNG state is not captured. | Divergent random values cause cascading behavioral divergence. |
+| **Float mode lock** | Forces IEEE 754 strict mode: disables FMA fusion, sets rounding mode to round-to-nearest-even, disables fast-math. Platform differences (x86 vs ARM) in fused multiply-add can produce tiny float divergences. | Float divergence is initially invisible (hash matches for many ticks) then suddenly deviates — hardest bug to trace. |
+| **Order lock** | Guarantees stable Lua hook traversal order (scene tree DFS) + stable `pairs()` iteration in Lua tables by replacing `pairs()` with a sorted iterator. | Non-deterministic iteration order causes different nodes to see different mutation ordering. |
+
+**Recording mode**: All three locks ON by default when `engine.start_recording()` is called. **Development mode**: All three OFF. The engine reports which locks are active in `TickReport.meta.determinism_locks` so replay can verify the recording's lock configuration matches expectations.
+
 ## Rationale
 
 1. **Determinism**: No behavior can observe mutations from another behavior within the same tick. The evaluation phase sees a frozen state snapshot.
@@ -232,3 +247,17 @@ A single built-in `Input` node (id=`_input`) carries the current input frame as 
 Input sources: terminal keyboard (craft-terminal calls `InputBus::press_action()`), agent RPC (`engine.setInput()`), or replay (`ReplayRunner` feeds recorded `InputFrame`). Input is frame-latched — all behaviors in the same tick see the same input frame.
 
 This replaces Godot's distributed `Input` singleton + `_input(event)` callback model, enabling deterministic replay by recording `InputFrame` per tick.
+
+## Appendix D: Verb Extension Protocol
+
+The 9-verb vocabulary is **closed per schema version**, not closed forever. This balances determinism (no unexpected verbs during replay) with long-term evolution:
+
+| Rule | Detail |
+|------|--------|
+| **Versioned vocabulary** | Each `craft-schema` major version defines its verb set. v1 = 9 verbs. v2 may add verbs. Old verb sets are permanently retained as valid subsets. |
+| **Schema negotiation** | `engine.getSchema()` returns `{ version: "1.0", verbs: ["set_state", ...] }`. The agent SDK reads the version and enables/disables code paths accordingly. |
+| **Backward compatibility** | A v1 scene.json with only v1 verbs is valid under v2 schema. New verbs are additive, never removed. |
+| **Recording stability** | A recording embeds its schema version. Replay validates that the current engine supports the recorded schema version (major version must match, minor can be higher). |
+| **Deprecation** | Verbs may be marked `deprecated` in schema but continue to function. Deprecated verbs emit a lint warning, not an error. Removal requires a major version bump. |
+
+This keeps the vocabulary "closed" within any single replay session while allowing safe evolution across engine versions. The agent's reasoning surface stays bounded — it never encounters verbs it doesn't understand because the schema version tells it exactly which set is active.

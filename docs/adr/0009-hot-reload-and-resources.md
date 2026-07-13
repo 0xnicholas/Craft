@@ -103,3 +103,7 @@ All paths use the `res://` scheme:
 - `res://games/tower_defense/scene.json` — scene file
 - `res://games/tower_defense/resources/enemy_stats.json` — resource file
 - `res://` prefix is resolved relative to the project root
+
+## Replay Constraint
+
+Hot reload and replay interact (see ADR 0006 §"Replay × Hot Reload"). **v1 restriction**: Recordings that span a hot reload boundary cannot be replayed across that boundary. Pre-reload and post-reload tick ranges can be replayed independently. Cross-patch replay is deferred to v2.

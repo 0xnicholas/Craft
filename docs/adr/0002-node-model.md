@@ -87,3 +87,25 @@ Too much indirection for a scene tree that needs explicit parent/child hierarchy
 
 ### Runtime-typed enum
 Every node type would require modifying the engine's source enum. Not viable for user-defined types.
+
+## Component Dependency Declaration
+
+Property-bag components are independent by default, but some components have implicit dependencies (e.g., a `Sprite` component is meaningless without a `Transform` component, `Collision` needs `Hitbox`). These are not enforced at the type-system level but declared in the schema — enabling lint-time detection, not runtime crashes.
+
+```rust
+craft_node!(Player, {
+    components: {
+        position: Vec2 = [0.0, 0.0],         // independent
+        sprite: String = "player.asc",        // #[requires(position)] — lint warns if missing
+        hitbox: Vec2 = [1.0, 1.0],          // #[requires(position)]
+    },
+});
+```
+
+The `requires` declaration:
+- **Lint-time only** — does not affect component storage or tick behavior
+- **Schema-visible** — surfaced in JSON Schema so agents see dependency constraints
+- **Warning, not error** — missing a dependency emits a lint warning, not a validation error (allows iterative authoring)
+- **Transitive** — if sprite requires position and hitbox requires sprite, hitbox transitively requires position
+
+This gives the structural safety of class hierarchies (can't have a Sprite without a Transform) without the inheritance.
