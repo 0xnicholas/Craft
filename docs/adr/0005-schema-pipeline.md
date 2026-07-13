@@ -66,7 +66,8 @@ Schema validation failures produce structured errors:
       "json_path": "$.nodes.enemy.components.speed",
       "expected_type": "number",
       "actual_value": "\"fast\"",
-      "suggestion": "Replace string with a numeric value, e.g. 5.0"
+      "suggestion": "Replace string with a numeric value, e.g. 5.0",
+      "auto_fixable": "suggested"
     }
   ]
 }

@@ -60,6 +60,16 @@ impl Recorder {
 fn validate_lua_determinism(tree: &SceneTree) -> EngineResult<()>;
 ```
 
+The validation lives inside `Recorder::start()` and executes **regardless of entry point**:
+
+| Caller | Path | Lock behavior |
+|--------|------|---------------|
+| `engine.start_recording()` (bridge/agent SDK) | Bridge → `Engine::start_recording()` → `Recorder::start()` | Agent-facing API. The bridge automatically enables all three determinism locks on `lua_class` nodes before calling `Recorder::start()`, so the agent doesn't need to manually call `engine.set_determinism(true)`. |
+| `Recorder::start()` (direct, test harness) | `record_run(scene, seed, ticks)` → `Recorder::start()` | Test/benchmark API. The test harness must manually enable locks or the validation will reject the recording. This is defense-in-depth: even if the test author forgets, the validation catches it before a non-deterministic recording is created. |
+| `Recorder::start()` (editor, ADR 0017) | Editor "Record" button → `Recorder::start()` | Same as test harness — editor-side code must enable locks. |
+
+The validation is a **single gate** in `Recorder::start()`, not duplicated across callers. Any path that reaches `Recorder::start()` hits the same check. This means a recording can never be created with unlocked Lua determinism, regardless of whether it was triggered by an agent, a test, or the editor.
+
 ### Replay Runner
 
 ```rust

@@ -126,9 +126,9 @@ Agent writes scene.json with 3 mistakes
 engine.start("res://scene.json")
      ↓
 returns EngineError::Validation([
-  { json_path: "$.root.components.bad_key", expected_type: "─", actual: {...}, suggestion: "Remove unknown key 'bad_key'" },
-  { json_path: "$.nodes[2].type", expected_type: "known node type", actual: "\"Monstr\"", suggestion: "Did you mean 'Monster'?" },
-  { json_path: "$.nodes[3].behaviors[0].states.attacking.on.tick", expected_type: "string (state name)", actual: "null", suggestion: "Specify a target state, e.g. \"idle\"" },
+  { json_path: "$.root.components.bad_key", expected_type: "─", actual: {...}, suggestion: "Remove unknown key 'bad_key'", auto_fixable: "safe" },
+  { json_path: "$.nodes[2].type", expected_type: "known node type", actual: "\"Monstr\"", suggestion: "Did you mean 'Monster'?", auto_fixable: "suggested" },
+  { json_path: "$.nodes[3].behaviors[0].states.attacking.on.tick", expected_type: "string (state name)", actual: "null", suggestion: "Specify a target state, e.g. \"idle\"", auto_fixable: "needs_review" },
 ])
      ↓
 Agent reads errors, makes 3 edits, calls engine.start() again → success

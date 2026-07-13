@@ -106,11 +106,15 @@ Every node type would require modifying the engine's source enum. Not viable for
 Property-bag components are independent by default, but some components have implicit dependencies (e.g., a `Sprite` component is meaningless without a `Transform` component, `Collision` needs `Hitbox`). These are not enforced at the type-system level but declared in the schema — enabling lint-time detection, not runtime crashes.
 
 ```rust
+// Schema-level attribute — goes on the component field, processed by craft_node! macro.
+// This is illustrative syntax; the final proc-macro API may differ.
 craft_node!(Player, {
     components: {
-        position: Vec2 = [0.0, 0.0],         // independent
-        sprite: String = "player.asc",        // #[requires(position)] — lint warns if missing
-        hitbox: Vec2 = [1.0, 1.0],          // #[requires(position)]
+        position: Vec2 = [0.0, 0.0],
+        #[requires(position)]  // lint warns if position is missing from this node type
+        sprite: String = "player.asc",
+        #[requires(position)]  // transitive: hitbox requires sprite requires position
+        hitbox: Vec2 = [1.0, 1.0],
     },
 });
 ```
