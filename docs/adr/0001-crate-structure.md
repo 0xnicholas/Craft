@@ -12,7 +12,7 @@ Godot's equivalent is a monolithic C++ tree (`core/`, `scene/`, `servers/`, `edi
 
 ## Decision
 
-**5 Cargo workspace crates** with internal `pub mod` boundaries within `craft-kernel`:
+**6 Cargo workspace crates** with internal `pub mod` boundaries within `craft-kernel`:
 
 ```
 craft/

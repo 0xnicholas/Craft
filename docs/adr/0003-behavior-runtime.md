@@ -195,7 +195,7 @@ The "optional lock-on-record" for Lua scripts (ADR 0016) decomposes into three o
 
 4. **Hot reload safety**: The evaluate → apply boundary is a natural pause point. If a file change is detected during evaluation, the engine defers application until after reload.
 
-5. **Tick ordering is explicit and documented**: Node order = declaration order in scene JSON. Within a node: state machine → on_tick rules → on_signal handlers (lexicographic by signal_name, then by subscription order). Within an action list: declaration order. Actions within the same list see prior actions' effects.
+5. **Tick ordering is explicit and documented**: Node order = declaration order in scene JSON. Lua Pre-Pass runs first for nodes with `lua_class`, then JSON evaluation: within a node, after Lua hooks complete, state machine → on_tick rules → on_signal handlers (lexicographic by signal_name, then by subscription order). Within an action list: declaration order. Actions within the same list see prior actions' effects.
 
 6. **`animate` is a first-class verb, not a composite**: Godot's Tween node requires multiple setup calls. Craft's `animate` is a single action — the engine manages interpolation internally across ticks. This matches the AI-native thesis: one declarative action, not multiple procedural steps.
 
