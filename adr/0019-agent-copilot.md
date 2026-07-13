@@ -185,6 +185,28 @@ The agent (LLM) is given the engine's API as tools:
 ```json
 {
   "tools": [
+    // Engine AI-native primitives (ADR 0014)
+    {
+      "name": "lint",
+      "description": "Static analysis of a scene — unreachable states, missing subscribers, broken paths",
+      "parameters": { "scene": "Scene" }
+    },
+    {
+      "name": "dry_run",
+      "description": "Simulate actions without side effects",
+      "parameters": { "node_id": "string", "actions": "Action[]" }
+    },
+    {
+      "name": "explain",
+      "description": "Get structured explanation of a node",
+      "parameters": { "node_id": "string" }
+    },
+    {
+      "name": "diff",
+      "description": "Compare two ticks in a recording",
+      "parameters": { "tick_a": "u32", "tick_b": "u32" }
+    },
+    // Extended scene-authoring tools (editor-specific)
     {
       "name": "read_scene",
       "description": "Read the current scene.json content",
@@ -201,16 +223,6 @@ The agent (LLM) is given the engine's API as tools:
       "parameters": { "description": "string", "diff": "SceneDiff" }
     },
     {
-      "name": "dry_run",
-      "description": "Simulate actions without side effects",
-      "parameters": { "node_id": "string", "actions": "Action[]" }
-    },
-    {
-      "name": "explain",
-      "description": "Get structured explanation of a node",
-      "parameters": { "node_id": "string" }
-    },
-    {
       "name": "search_luarocks",
       "description": "Search LuaRocks for packages",
       "parameters": { "query": "string" }
@@ -219,7 +231,7 @@ The agent (LLM) is given the engine's API as tools:
 }
 ```
 
-These tools map directly to the engine's AI-native primitives (ADR 0014).
+These tools extend the AI-native primitives (ADR 0014: `lint`, `dryRun`, `explain`, `diff`) with additional scene-authoring tools (`read_scene`, `read_node`, `propose_diff`, `search_luarocks`) tailored for the Copilot workflow. The first four are engine primitives; the last four are editor-specific wrappers that present the engine's data in an agent-friendly format.
 
 ## Rationale
 

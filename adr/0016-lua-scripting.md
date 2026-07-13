@@ -272,6 +272,10 @@ games/tower_defense/
 
 This mirrors GDScript's philosophy — development speed > mathematical purity — but adds Craft's unique capability: **optional determinism when you need it for agents and CI**.
 
+## PRD Deviation
+
+PRD §3.2 lists "Lua / Python / GDScript-style embedded scripting" as a v1 non-goal. This ADR defines Lua for v1/v2 scope — the two-tier behavior model allows Lua to ship alongside JSON behaviors. The PRD's exclusion was based on the original single-tier thesis (JSON-only for AI agents). Adding Lua as a second tier preserves the agent path while expanding to human authors. See ADR 0003 for the updated two-tier tick loop.
+
 ## Rationale
 
 1. **Lua is proven in gamedev**: World of Warcraft (Lua since 2004), Roblox (Luau), Factorio, Balatro, Core Keeper — all ship Lua scripting for game logic. It is the industry standard for embeddable game scripting.

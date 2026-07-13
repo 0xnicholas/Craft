@@ -142,11 +142,11 @@ Aligned with Godot shortcuts where applicable. Non-Godot shortcuts added for Cra
 | Ctrl+X/C/V | Cut/Copy/Paste | Same |
 | Ctrl+D | Duplicate selected node | Same |
 | Delete | Delete selected node | Same |
-| Ctrl+A | Select all | Same |
+| Ctrl+A | Select all (text editors and panels) | Same |
 | Ctrl+F | Find in current file | Same |
 | Ctrl+Shift+F | Find in project | Same |
 | **Scene** | | |
-| Ctrl+A (scene tree focused) | Add child node | Godot: Ctrl+A |
+| Ctrl+Shift+A | Add child node (scene tree focused) | Godot: Ctrl+A in scene dock. Craft uses a different chord to avoid conflict. |
 | F2 | Rename selected node | Same |
 | Ctrl+Up/Down | Move node up/down in sibling order | (Godot: drag only) |
 | **View** | | |
@@ -479,7 +479,7 @@ Bottom bar showing context-dependent information:
 | **No dry-run**: must actually run to test behavior | `dryRun` in editor: select a node, compose actions, see predicted diff — no run needed |
 | **No replay/step debugging**: must use print() | Replay scrubber: pause, step, inspect any tick. Timeline scrubber with state diff. |
 | **GDScript only**: learning curve for non-Python devs | Lua 5.5: universal, smaller, 30 years of ecosystem (LuaRocks). Plus JSON for agents. |
-| **Script reload loses state**: variable reset on reload | Hot reload preserves component state. Lua re-require keeps `self` table alive. |
+| **Script reload may reset state**: non-exported script variables reset on reload (Godot 3; Godot 4 preserves `@export` vars) | Hot reload preserves component state. Lua re-require keeps `self` table alive. No variable reset. |
 | **No schema introspection**: must read docs to know what methods exist | `engine.getSchema()` powers LSP auto-complete for both JSON and Lua. Always up-to-date. |
 | **No structured errors**: parse stderr for line numbers | Structured EngineError JSON with json_path + suggestion. Agent and human both parse it. |
 | **No recording/replay**: can't rewind to debug | Craft-native: record → replay → scrub → diff → fix → replay again. Counterfactual reasoning built in. |

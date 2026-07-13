@@ -149,6 +149,10 @@ impl TerminalPreview {
 }
 ```
 
+## PRD Deviation
+
+PRD §2.3 states "No GUI editor. The agent is the editor." PRD §3.2 lists GUI editor as a v1 non-goal. This ADR series (0017-0021) defines a v2 human editor that deviates from the PRD's thesis. The PRD's thesis holds for v1: the agent IS the editor. v1 validates that an agent can build a complete game through the API alone. v2 adds human tooling — a visual editor for designers who prefer direct manipulation — while keeping the agent as a first-class co-author (Copilot panel, ADR 0019). The engine's architecture does not change; the editor is a new consumer of the same API the agent uses.
+
 ## Rationale
 
 1. **Embedded engine eliminates transport overhead**: No WebSocket, no serialization, no async. The editor calls `engine.tick()` as a function call. This is how Godot works and it's the right model.
