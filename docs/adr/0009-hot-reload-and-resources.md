@@ -30,7 +30,7 @@ apply diff:
   - new node           → spawn, insert into tree
   - node removed       → despawn subtree, cleanup signal subscriptions
   - behavior changed   → replace Behavior object
-  - node type changed  → despawn + respawn (reuse NodeId)
+  - node type changed  → in-place respawn (preserves NodeId — see ADR 0002 §"NodeId Stability")
      ↓
 emit signal "hot_reload" { diff, affected_nodes }
      ↓

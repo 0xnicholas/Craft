@@ -45,10 +45,19 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn start(scene: &Scene, seed: u64, resources: &ResourceRegistry) -> Self;
+    /// Starts recording. Returns `EngineError::Validation` if the scene contains
+    /// lua_class nodes without determinism locks enabled (see ADR 0003 §"Lua Determinism Lock").
+    /// This is a hard error — silent non-deterministic recording is worse than no recording.
+    pub fn start(scene: &Scene, seed: u64, resources: &ResourceRegistry) -> EngineResult<Self>;
     pub fn record_tick(&mut self, tick: u32, input: &InputFrame, report: &TickReport);
     pub fn finish(self) -> Recording;
 }
+
+/// Recorder::start() calls this validation before recording begins.
+/// Scans the scene tree for any node with a lua_class that has not called
+/// engine.set_determinism(true) (i.e., the three locks from ADR 0003 are not all ON).
+/// Returns structured validation errors listing affected nodes and which lock is missing.
+fn validate_lua_determinism(tree: &SceneTree) -> EngineResult<()>;
 ```
 
 ### Replay Runner
@@ -74,6 +83,21 @@ impl ReplayRunner {
 Given: scene_snapshot + seed + input_log + resource_snapshots
 Replay yields: byte-identical state at every tick
 Verified by: per-tick state_hash comparison
+
+### Recording Pre-Flight: Lua Determinism Validation
+
+ADR 0016 defines Lua's default development mode as non-deterministic (`math.random` usable, no lock). Before recording, `Recorder::start()` performs a mandatory pre-flight check:
+
+1. Scan the scene tree for every node with `lua_class` set
+2. Verify `engine.determinism_locks()` returns all three switches ON (ADR 0003)
+3. If any node has Lua scripts running without determinism locks → `Recorder::start()` returns `EngineError::Validation` with structured errors listing:
+   - Which node IDs have unlocked Lua scripts
+   - Which locks are missing (RNG, Float, Order)
+   - Suggestion: "Call engine.set_determinism(true) on all lua_class nodes before recording"
+
+This is a **hard error**, not a warning. Silent non-deterministic recording produces replays that fail hash verification — creating false-positive "determinism bugs" that waste debugging time. The recorder refuses to create a recording it knows will be unreplayable.
+
+For scenes without any `lua_class` nodes (pure JSON behaviors), this check passes trivially — JSON behaviors are always deterministic.
 ```
 
 Any hash mismatch is a **determinism bug** — tracked and fixed before v1 ships.

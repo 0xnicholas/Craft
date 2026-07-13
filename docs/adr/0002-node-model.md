@@ -63,7 +63,20 @@ The engine stores all nodes homogenously. Type safety is enforced at *load time*
 
 4. **Eliminates the entire Variant/ClassDB/MethodBind subsystem**: Godot's `core/` is 170K lines; a significant fraction is the Object system. Craft replaces it with a single `HashMap<String, ComponentValue>` and compile-time JSON Schema generation.
 
-5. **SlotMap for generational indexing**: `NodeId` uses a generational index to prevent ABA problems when nodes are despawned and re-spawned with the same index. Hot reload guarantees ID stability.
+5. **SlotMap for generational indexing**: `NodeId` uses a generational index to prevent ABA problems when nodes are despawned and re-spawned with the same index. Hot reload guarantees ID stability (see below).
+
+### NodeId Stability Across Hot Reload
+
+ADR 0009 requires "Node IDs are stable across reloads" so agent subscriptions survive. Standard SlotMap `remove()` + `insert()` produces a new ID with incremented generation — breaking that invariant. Craft handles this with two distinct code paths:
+
+| Operation | Mechanism | NodeId behavior |
+|-----------|-----------|-----------------|
+| **Despawn** (node removed from scene) | `SlotMap::remove(id)` — frees slot, increments generation | ID permanently invalidated. Future `spawn()` gets a new ID. |
+| **Type change** (hot reload only) | In-place respawn: `Node::replace_type(&mut self, new_type)` — overwrites type_name + re-validates components + replaces behaviors. SlotMap entry is **mutated in place**, no remove+insert. | ID preserved. Same slot, same generation. Agent subscriptions unaffected. |
+| **Component update** (hot reload) | Direct mutation of `node.components[key]`. | ID preserved. |
+| **Behavior replacement** (hot reload) | `node.behaviors = new_behaviors`. | ID preserved. |
+
+The in-place respawn path is restricted to the hot reload subsystem — user code never calls it directly. It is the only operation that changes `type_name` while preserving the ID.
 
 ## Godot Mapping
 

@@ -168,18 +168,18 @@ All engine errors are JSON with `file`, `json_path`, `expected_type`, `actual_va
 |-----|-------|-------------|
 | 0001 | Crate Structure | 6-crate workspace: kernel, lua, schema, replay, bridge, terminal |
 | 0002 | Node Model | Property-bag + tree; no inheritance; SlotMap generational indices |
-| 0003 | Behavior Runtime | Two-tier: Lua + JSON; command buffer + expressions + system registry + input model |
-| 0004 | Render Trait | 4-method trait; ComponentView iterator; NullRenderer for testing |
+| 0003 | Behavior Runtime | Two-tier: Lua + JSON; command buffer + **expressions** (7 operators) + **system registry** (craft_system!) + **input model** (InputBus) + verb extension protocol |
+| 0004 | Render Trait | 4-method trait; ComponentView iterator; RenderCapabilities extension seam; NullRenderer for testing |
 | 0005 | Schema Pipeline | schemars + craft-schema extensions; JSON Schema → TS types |
 | 0006 | Replay System | Per-tick hash recording; deterministic re-run; resource snapshots |
-| 0007 | Bridge Layer | Sync NAPI + JSON-RPC; transport trait; AI-native primitives (lint, dryRun, explain, diff) |
+| 0007 | Bridge Layer | Sync NAPI + JSON-RPC; transport trait; **AI-native primitives** (lint, dryRun, explain, diff); dual transport, single semantic API |
 | 0008 | Error Handling | Structured JSON errors; bulk collection; actionable suggestions |
 | 0009 | Hot Reload | File watcher → diff → hot-patch; stale resource semantics |
 | 0010 | Testing | Four-layer pyramid: unit, replay regression, agent benchmarks, integration |
 | 0015 | Performance Budgets | 8 committed targets: ≤8ms tick, ≤100ms hot reload, ≤5s replay |
 | 0016 | Lua Scripting | Lua 5.5 via mlua; first-class scripting; GDScript parity |
 | 0017 | Editor Architecture | egui + eframe embedded; file-based editing; PRD v2 deviation |
-| 0018 | Editor Panels & UX | Scene Tree, Inspector, Behavior Editor, Terminal, File Browser, Lua Editor, UX spec |
+| 0018 | Editor Panels & UX | Scene Tree, Inspector, Behavior Editor, Terminal, File Browser, **Lua Script Editor** (LuaLS LSP + engine type stubs), **UX spec** (visual language, shortcuts, drag-drop, 5 workflows) |
 | 0019 | Agent Copilot | Sidebar panel; context injection; diff review flow |
 
 ## Key Design Principles
