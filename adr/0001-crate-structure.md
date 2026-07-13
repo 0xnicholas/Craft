@@ -18,29 +18,47 @@ Godot's equivalent is a monolithic C++ tree (`core/`, `scene/`, `servers/`, `edi
 craft/
 ├── Cargo.toml              # workspace root
 ├── crates/
-│   ├── craft-kernel/       # engine core: scene, signal, behavior, resource, system, hot_reload, lint
+│   ├── craft-kernel/       # engine core: scene, signal, JSON behaviors, resource, system, hot_reload, lint
 │   │   └── src/
 │   │       ├── scene/      # Node, SceneGraph, Component storage
 │   │       ├── signal/     # Signal bus, subscriptions
-│   │       ├── behavior/   # Command buffer, scheduler, action interpreter
+│   │       ├── behavior/   # JSON behavior runtime: command buffer, scheduler, action interpreter
 │   │       ├── resource/   # Resource registry, URI resolution
 │   │       ├── system/     # craft_system! macro, system registry
 │   │       ├── hot_reload/ # File watcher, diff, hot-patch
 │   │       └── lint/       # Static scene analysis
+│   │
+│   ├── craft-lua/          # Lua 5.5 scripting runtime (mlua + engine bindings)
+│   │   └── src/
+│   │       ├── vm.rs       # Lua VM lifecycle, sandboxing
+│   │       ├── bindings/   # Node/Engine/Signal Lua userdata bindings
+│   │       ├── class.rs    # Class loader (require → find hooks)
+│   │       └── coroutine.rs # Coroutine scheduler (wait_ticks, start_coroutine)
+│   │
 │   ├── craft-schema/       # schemars-based JSON Schema generation + Craft extension attributes
+│   │
 │   ├── craft-replay/       # recording codec, seed management, replay runner
+│   │
 │   ├── craft-bridge/       # NAPI bindings + JSON-RPC adapter
+│   │
 │   └── craft-terminal/     # ANSI terminal renderer (implements Render trait)
+│
 ├── sdk/                    # TypeScript SDK (npm package)
+│
 └── games/
     └── tower_defense/      # reference game
+        ├── scene.json
+        ├── scripts/        # Lua classes and libraries
+        ├── resources/
+        └── behaviors/      # JSON behaviors (agent path)
 ```
 
 **Dependency DAG**:
 ```
-craft-terminal ──→ craft-kernel  (Render trait defined here)
-craft-replay   ──→ craft-kernel  (reads scene, feeds ticks)
-craft-bridge   ──→ craft-kernel + craft-schema  (wraps kernel, exports schemas)
+craft-terminal ──→ craft-kernel   (Render trait defined here)
+craft-replay   ──→ craft-kernel   (reads scene, feeds ticks)
+craft-lua      ──→ craft-kernel   (Lua VM + engine bindings; kernel doesn't know about Lua)
+craft-bridge   ──→ craft-kernel + craft-schema + craft-lua  (wraps kernel, exports schemas + Lua API)
 craft-schema   ──→ (no kernel dep; only schemars + syn/quote for proc macros)
 ```
 
@@ -60,12 +78,11 @@ craft-schema   ──→ (no kernel dep; only schemars + syn/quote for proc macr
 | `scene/` | `craft-kernel::scene/` | Unified property-bag Node model (no deep inheritance) |
 | `servers/rendering/` | `Render` trait in `craft-kernel` | 4 methods vs Godot's 100+ method RenderingServer |
 | `drivers/vulkan/` etc. | `craft-terminal/` | Only v1 render backend |
-| `modules/gdscript/` | `craft-kernel::behavior/` + `::system/` | JSON interpreter + Rust system registry, no scripting VM |
-| `editor/` (33万行) | None | PRD explicitly excludes GUI editor |
-| `platform/` (9万行) | None | v1 runs in Node.js process; platform handled by NAPI host |
+| `modules/gdscript/` | `craft-lua/` | Lua 5.5 via mlua, not custom language. Full GDScript parity. |
+| `editor/` (33万行) | `craft-editor/` (v2 crate) | egui-based, embedded engine, file-based editing |
 | `core/extension/` | `craft-kernel::system/` `craft_system!` macro | Rust-internal extension, not cross-language C ABI |
 | SCsub build system | Standard `Cargo.toml` workspace | No custom build system needed |
-| `thirdparty/` (69 libs) | ~5 cargo dependencies | schemars, serde, napi-rs, notify, rand |
+| `thirdparty/` (69 libs) | ~6 cargo dependencies | schemars, serde, napi-rs, notify, rand, mlua |
 
 ## Scale Comparison
 

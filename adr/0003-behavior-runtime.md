@@ -1,35 +1,46 @@
-# ADR 0003: Behavior Runtime — Command Buffer Pipeline
+# ADR 0003: Behavior Runtime — Two-Tier Model with Command Buffer
 
 **Date**: 2026-07-13
 **Status**: Accepted
+**Updated**: 2026-07-13 — Added two-tier model with Lua scripting (see ADR 0016)
 **Supersedes**: Godot's `_process`/`_physics_process` direct-mutation callbacks
 
 ## Context
 
-The PRD defines three behavior primitives: state machines, tick rules (`on_tick`), and signal handlers (`on_signal`). Behaviors compose a closed set of **9 action verbs** (PRD §6.5). The execution model must be deterministic, replayable, and free of reentrancy.
+The PRD defines three behavior primitives: state machines, tick rules (`on_tick`), and signal handlers (`on_signal`). Behaviors compose a closed set of **9 action verbs** (PRD §6.5). The execution model must support both human-authored Lua scripts and agent-authored JSON rules.
 
-Godot's model is `_process(delta)` and `_physics_process(delta)` — virtual functions called per-node where scripts mutate state directly. Mutations are visible immediately to subsequent calls within the same frame, and signal emissions dispatch synchronously to all subscribers. This can lead to order-dependent behavior, reentrancy, and non-deterministic execution.
+Two-tier behavior model (see ADR 0016):
+- **Tier 1**: Lua scripts — full power, direct mutation, GDScript parity
+- **Tier 2**: JSON behaviors — 9 verbs, command buffer, deterministic guarantee
+
+Both tiers coexist per-node. Execution order: Lua hooks → JSON rules.
 
 ## Decision
 
-**Command buffer with three-phase tick: evaluate (read-only) → flush signals → apply (write)**.
+**Three-phase tick with Lua pre-pass: Lua hooks (direct mutation) → JSON evaluate (read-only) → flush signals → apply (write)**.
 
 ```
 tick N:
   1. InputBus populates Input node's components
   2. Fire reserved "tick" signal
-  3. EVALUATE phase (READ-ONLY):
+  3. LUA PRE-PASS (direct mutation):
+     For each node with a lua_class, in declaration order:
+       a. Call lua_instance:on_tick()    — reads/writes components directly
+       b. Call lua_instance:on_signal()  — for signals queued before this tick
+     Lua mutations are immediately visible to subsequent steps in the same tick.
+  4. JSON EVALUATE phase (READ-ONLY):
      For each node in declaration order:
        a. State machine: evaluate transitions triggered by tick/queued signals
-       b. on_tick rules: evaluate actions against current (unchanged) state
+       b. on_tick rules: evaluate actions against current state (including Lua mutations)
        c. on_signal handlers: evaluate for signals queued before this tick
           (ordered by signal_name lexicographic, then by subscription registration order)
-     All actions produce ActionCommand values → pushed to command_buffer
-  4. FLUSH signals emitted during evaluation (enqueue for next tick)
-  5. APPLY phase (WRITE):
-     Drain command_buffer, apply mutations to SceneTree
-  6. Transient component lifecycle: decrement counters, emit .done signals
-  7. RENDER phase: read final state, produce output frame
+     All JSON actions produce ActionCommand values → pushed to command_buffer
+  5. FLUSH signals emitted during JSON evaluation (enqueue for next tick)
+  6. APPLY phase (WRITE):
+     Drain command_buffer, apply mutation commands to SceneTree
+     Note: Lua mutations were already applied in step 3. JSON mutations applied here.
+  7. Transient component lifecycle: decrement counters, emit .done signals
+  8. RENDER phase: read final state, produce output frame
 ```
 
 ### Action Vocabulary (per PRD §6.5)
@@ -177,11 +188,14 @@ PRD §7.4 states: "Node A cannot directly `set_state` node B's component." The r
 
 | Godot Pattern | Craft Replacement |
 |---------------|-------------------|
-| `_process(delta)` virtual function | `on_tick` JSON rule interpreted by BehaviorRuntime |
-| `emit_signal("name", args...)` — synchronous dispatch | `emit` → command buffer → next-tick delivery |
-| `set_position()` — immediate mutation | `set_state` → command buffer → apply phase |
-| `Tween` node (multi-step setup) | `animate` action (single declarative verb) |
-| `print()` / `print_debug()` | `log` action (structured, surfaces in agent stream) |
-| Manual state machine (enum + switch) | `state_machine` behavior primitive (declarative) |
-| `_input(event)` / `Input.get_vector()` | `InputBus` → `Input` node components + `on_signal` / `on_tick` |
-| GDScript/C# for game logic | JSON actions + `craft_system!` Rust functions via `call_system` |
+| `_process(delta)` virtual function | Lua `on_tick()` (Tier 1) OR JSON `on_tick` rule (Tier 2) |
+| `_on_signal_name(args)` per node | Lua `on_signal(signal_name, args)` (Tier 1) OR JSON `on_signal` handler (Tier 2) |
+| `emit_signal("name", args...)` — synchronous | `engine.emit("name", args)` in Lua OR `emit` JSON action |
+| `set_position()` — immediate mutation | Lua: `node.position = {10,20}` (direct). JSON: `set_state` → command buffer |
+| `Tween` node (multi-step setup) | JSON `animate` action (declarative) |
+| `print()` / `print_debug()` | `engine.log("info", msg)` in Lua OR JSON `log` action |
+| Manual state machine (enum + switch) | JSON `state_machine` behavior primitive |
+| `_input(event)` / `Input.get_vector()` | `InputBus` → `Input` node components |
+| GDScript for game logic | Lua 5.5 (Tier 1) for humans, JSON 9 verbs (Tier 2) for agents |
+| GDScript `await` / `yield` | Lua coroutines + `engine.wait_ticks(N)` + `engine.start_coroutine(fn)` |
+| `extends Node2D` / `class_name Enemy` | `lua_class: "scripts.classes.enemy"` in scene JSON |
