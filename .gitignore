@@ -17,3 +17,4 @@ _references/
 .DS_Store
 .pi-subagents/
 node_modules/
+.worktrees/
