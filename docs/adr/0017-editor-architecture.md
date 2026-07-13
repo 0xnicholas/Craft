@@ -126,7 +126,20 @@ Like Godot, the editor works on files:
 4. Press **Run (F5)** → engine starts with current scene.json → **Terminal Preview** panel shows live output
 5. Editing scene.json during preview → file watcher triggers hot reload
 
-The editor never operates on the engine's live state directly (except through hot reload). All edits go to disk first, then engine picks them up.
+### Read/Write Split: File Editing vs Live Engine Access
+
+The editor operates on two distinct data paths:
+
+| Operation type | Path | Rationale |
+|---------------|------|-----------|
+| **Writes** (scene modifications) | File → hot reload | All scene edits go to disk as JSON, then engine hot-reloads the diff. This is the only write path. No direct mutation of engine memory. Guarantees that what the human sees in the editor matches what's on disk — and what the agent will read from the file. |
+| **Reads** (inspector preview, agent context) | Live engine state | The Inspector shows **current** component values from the running engine (not the file). The Copilot panel reads live state for `explain()`, `dryRun()`, `read_node()` — these are contextual reads for the agent, not writes. The File Browser and Behavior Editor show file content. |
+
+This split means:
+- The editor's Scene Tree and Inspector show **live** values when the engine is running (F5), and **file** values when stopped
+- Agent Copilot tools (ADR 0019) that read state (`read_node`, `dry_run`, `explain`, `diff`) access the live engine directly — they need real-time context
+- Agent tools that modify state (`propose_diff`) always write to the file path, never directly to engine memory
+- The "file-first" principle applies to writes only. Reads are dual-path: file content for authoring, live state for debugging and agent context
 
 ### Rendering the Terminal Preview
 

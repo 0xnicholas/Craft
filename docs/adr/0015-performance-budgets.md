@@ -17,6 +17,8 @@ PRD §10.0 defines concrete performance targets. These are not aspirations — t
 | Metric | Target | Data-Structure Impact |
 |--------|--------|----------------------|
 | Active nodes per scene | 1,000 | `SlotMap<NodeId, Node>` — O(1) by-ID lookup, O(n) walk |
+| Nodes with lua_class per scene | 100 | Each Lua hook call is a full FFI boundary crossing (Rust → mlua → Lua). 100 nodes × ~50μs per call = ~5ms of Lua overhead within the tick budget. |
+| Lua pre-pass wall-clock budget (within 8ms tick) | ≤ 3 ms | The Lua pre-pass (ADR 0003) runs before JSON evaluation. At 60Hz, this leaves 5ms for JSON evaluation + apply + render. If a scene needs more Lua nodes, reduce tick rate or move logic to JSON behaviors. |
 | Signals fired per tick | 100 | `VecDeque<SignalEvent>` — O(1) push/pop, no reallocation |
 | Actions executed per tick | 10,000 | `Vec<ActionCommand>` — amortized O(1) push, linear drain |
 | Tick rate (default) | 60 Hz | ~16.67ms wall clock per tick |
@@ -67,6 +69,12 @@ PRD §10.0 defines concrete performance targets. These are not aspirations — t
 - Bulk error collection (ADR 0008) means validation runs to completion even after finding errors — must complete within 200ms for 1,000 nodes
 - Validation is CPU-bound (JSON parsing + jsonschema traversal). Use `jsonschema` crate with pre-compiled schema — compile once at engine init, reuse per-validation
 - Lint is a subset of validation (no JSON parse, only AST traversal). 50ms budget is aggressive but achievable with cached lookups (pre-computed signal subscriber index, state machine reachability cache)
+
+**8. Lua execution overhead**:
+- Lua pre-pass is the new cost center in the tick loop (ADR 0003 step 3). Each `on_tick()` / `on_signal()` hook call crosses the Rust→Lua FFI boundary via mlua
+- Budget: 100 Lua nodes × 50μs per call = 5ms max. This assumes compiled Lua bytecode (scripts pre-compiled at load time, not re-parsed each tick)
+- Mitigation: pre-compile all Lua scripts at load time (`mlua::Chunk::into_function`), cache compiled chunk per script file, only re-compile on file change (hot reload)
+- Lua nodes beyond 100: reduce tick rate (30Hz = 33ms budget) or migrate logic to JSON behaviors (no FFI overhead)
 
 ### Profiling and Enforcement
 
