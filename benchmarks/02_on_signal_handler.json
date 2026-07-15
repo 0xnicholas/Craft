@@ -1,0 +1,91 @@
+{
+  "name": "02_on_signal_handler",
+  "description": "Emitter emits 'tick' signal on on_tick; Probe has on_signal handler that decrements count via move-by -1 each time the signal fires. After 6 ticks, count == -5.",
+  "seed": 0,
+  "ticks": 6,
+  "scene": {
+    "kind": "scene",
+    "name": "bench02",
+    "nodes": [
+      {
+        "id": "e1",
+        "type": "Emitter",
+        "components": {
+          "fired": {
+            "type": "Int",
+            "value": 0
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "on_tick",
+            "actions": [
+              {
+                "kind": "emit",
+                "signal": "tick",
+                "args": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "p1",
+        "type": "Probe",
+        "components": {
+          "count": {
+            "type": "Int",
+            "value": 0
+          },
+          "position": {
+            "type": "Vec2",
+            "value": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "on_signal",
+            "signal": "tick",
+            "actions": [
+              {
+                "kind": "move",
+                "target": {
+                  "kind": "self"
+                },
+                "key": "count",
+                "by": -1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "spawn_counter": 0
+  },
+  "actions_per_tick": [],
+  "expected_final_hash": 1674681322455168247,
+  "expected_components": {
+    "e1": {
+      "fired": {
+        "type": "Int",
+        "value": 0
+      }
+    },
+    "p1": {
+      "count": {
+        "type": "Int",
+        "value": -5
+      }
+    }
+  },
+  "expected_signals_emitted": [
+    "tick",
+    "tick",
+    "tick",
+    "tick",
+    "tick"
+  ]
+}

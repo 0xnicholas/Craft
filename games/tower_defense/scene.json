@@ -1,0 +1,150 @@
+{
+  "kind": "scene",
+  "name": "tower_defense",
+  "nodes": [
+    {
+      "id": "spawner_main",
+      "type": "Spawner",
+      "components": {
+        "cooldown": 0,
+        "spawn_interval": 20,
+        "spawned_count": 0,
+        "position": [0.0, 0.0]
+      },
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "cooldown", "by": 1 },
+            {
+              "kind": "if",
+              "cond": { "gt": [{ "ref": "self.cooldown" }, 19] },
+              "then": [
+                {
+                  "kind": "spawn",
+                  "type": "Enemy",
+                  "parent": "self",
+                  "components": {
+                    "health": 5,
+                    "lifetime": 200,
+                    "speed": 0.5,
+                    "position": [0.0, 0.0]
+                  },
+                  "behaviors": [
+                    {
+                      "kind": "on_tick",
+                      "actions": [
+                        { "kind": "move", "target": "self", "key": "lifetime", "by": -1 },
+                        {
+                          "kind": "if",
+                          "cond": { "lt": [{ "ref": "self.lifetime" }, 1] },
+                          "then": [
+                            { "kind": "destroy", "target": "self" }
+                          ],
+                          "else": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                { "kind": "move", "target": "self", "key": "spawned_count", "by": 1 },
+                { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
+              ],
+              "else": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tower_a",
+      "type": "Tower",
+      "components": {
+        "cooldown": 0,
+        "fire_rate": 10,
+        "shots_fired": 0,
+        "damage": 5,
+        "kills": 0,
+        "position": [10.0, -2.0]
+      },
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "cooldown", "by": 1 },
+            {
+              "kind": "if",
+              "cond": { "gt": [{ "ref": "self.cooldown" }, 9] },
+              "then": [
+                { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_a" } },
+                { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
+                { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
+              ],
+              "else": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tower_b",
+      "type": "Tower",
+      "components": {
+        "cooldown": 0,
+        "fire_rate": 12,
+        "shots_fired": 0,
+        "damage": 5,
+        "kills": 0,
+        "position": [20.0, 1.5]
+      },
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "cooldown", "by": 1 },
+            {
+              "kind": "if",
+              "cond": { "gt": [{ "ref": "self.cooldown" }, 11] },
+              "then": [
+                { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_b" } },
+                { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
+                { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
+              ],
+              "else": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tower_c",
+      "type": "Tower",
+      "components": {
+        "cooldown": 0,
+        "fire_rate": 8,
+        "shots_fired": 0,
+        "damage": 5,
+        "kills": 0,
+        "position": [30.0, 0.0]
+      },
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "cooldown", "by": 1 },
+            {
+              "kind": "if",
+              "cond": { "gt": [{ "ref": "self.cooldown" }, 7] },
+              "then": [
+                { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_c" } },
+                { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
+                { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
+              ],
+              "else": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

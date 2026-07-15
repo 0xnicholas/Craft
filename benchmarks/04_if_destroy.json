@@ -1,0 +1,104 @@
+{
+  "name": "04_if_destroy",
+  "description": "Probe has if-count>=5:destroy-self behavior. After 10 ticks of +1, it self-destructs at tick 5 and stops counting. Emitter (lives alongside Probe) accumulates fired-count to 10.",
+  "seed": 0,
+  "ticks": 10,
+  "scene": {
+    "kind": "scene",
+    "name": "bench04",
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "Probe",
+        "components": {
+          "count": {
+            "type": "Int",
+            "value": 0
+          },
+          "position": {
+            "type": "Vec2",
+            "value": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "on_tick",
+            "actions": [
+              {
+                "kind": "move",
+                "target": {
+                  "kind": "self"
+                },
+                "key": "count",
+                "by": 1
+              },
+              {
+                "kind": "if",
+                "cond": {
+                  "lt": [
+                    {
+                      "ref": "self.count"
+                    },
+                    {
+                      "type": "Int",
+                      "value": 5
+                    }
+                  ]
+                },
+                "then": [],
+                "else": [
+                  {
+                    "kind": "destroy",
+                    "target": {
+                      "kind": "self"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e1",
+        "type": "Emitter",
+        "components": {
+          "fired": {
+            "type": "Int",
+            "value": 0
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "on_tick",
+            "actions": [
+              {
+                "kind": "move",
+                "target": {
+                  "kind": "self"
+                },
+                "key": "fired",
+                "by": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "spawn_counter": 0
+  },
+  "actions_per_tick": [],
+  "expected_final_hash": 8390532396301603841,
+  "expected_components": {
+    "e1": {
+      "fired": {
+        "type": "Int",
+        "value": 10
+      }
+    }
+  },
+  "expected_signals_emitted": []
+}

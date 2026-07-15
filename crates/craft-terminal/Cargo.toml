@@ -1,0 +1,13 @@
+[package]
+name = "craft-terminal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craft-kernel = { path = "../craft-kernel" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+craft-macros = { path = "../craft-macros" }
