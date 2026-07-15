@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/craft-kernel",
+    "crates/craft-lua",
     "crates/craft-macros",
     "crates/craft-replay",
     "crates/craft-bridge",

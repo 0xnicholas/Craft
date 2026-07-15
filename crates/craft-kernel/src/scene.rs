@@ -241,6 +241,58 @@ impl Scene {
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).expect("scene serialization is infallible")
     }
+
+    pub fn find_node(&self, id: &str) -> Option<&Node> {
+        self.nodes.iter().find(|n| n.id == id)
+    }
+
+    pub fn find_node_mut(&mut self, id: &str) -> Option<&mut Node> {
+        self.nodes.iter_mut().find(|n| n.id == id)
+    }
+
+    pub fn add_node(&mut self, node: Node) {
+        self.nodes.push(node);
+    }
+
+    pub fn next_spawn_id(&mut self, type_name: &str) -> String {
+        let id = format!("{}_{}", type_name, self.spawn_counter);
+        self.spawn_counter = self.spawn_counter.wrapping_add(1);
+        id
+    }
+}
+
+impl Node {
+    pub fn get_component_value(&self, key: &str) -> Option<&ComponentValue> {
+        self.components.get(key).map(|c| &c.value)
+    }
+
+    pub fn get_component_value_mut(&mut self, key: &str) -> Option<&mut ComponentValue> {
+        self.components.get_mut(key).map(|c| &mut c.value)
+    }
+
+    pub fn set_component_value(&mut self, key: &str, value: ComponentValue) -> EngineResult<()> {
+        match self.components.get_mut(key) {
+            Some(component) => {
+                component.value = value;
+                Ok(())
+            }
+            None => Err(EngineError::Validation {
+                file: String::new(),
+                errors: vec![crate::error::ValidationError {
+                    file: String::new(),
+                    json_path: format!("$.nodes[?id==\"{}\"].components.{}", self.id, key),
+                    message: format!("node \"{}\" has no component \"{}\"", self.id, key),
+                    expected_type: "existing component key".to_string(),
+                    actual_value: None,
+                    suggestion: Some(
+                        "Define the component in the node's \"components\" block before reading or writing it"
+                            .to_string(),
+                    ),
+                    auto_fixable: AutoFix::NeedsReview,
+                }],
+            }),
+        }
+    }
 }
 
 pub fn hash_scene_state(scene: &Scene) -> u64 {
@@ -947,5 +999,80 @@ mod tests {
             reloaded.nodes[0].components["health"].kind,
             ComponentKind::Regular
         );
+    }
+
+    fn make_node(id: &str, type_name: &str, components: &[(&str, ComponentValue)]) -> Node {
+        let mut map = BTreeMap::new();
+        for (k, v) in components {
+            map.insert(
+                (*k).to_string(),
+                Component {
+                    value: v.clone(),
+                    kind: ComponentKind::Regular,
+                },
+            );
+        }
+        Node {
+            id: id.to_string(),
+            type_name: type_name.to_string(),
+            parent: None,
+            components: map,
+            behaviors: Vec::new(),
+            active_state: None,
+        }
+    }
+
+    #[test]
+    fn find_node_returns_matching_node() {
+        let mut scene = Scene {
+            kind: SCENE_KIND.to_string(),
+            name: "s".to_string(),
+            nodes: Vec::new(),
+            spawn_counter: 0,
+        };
+        scene.add_node(make_node("a", "X", &[("hp", ComponentValue::Int(10))]));
+        scene.add_node(make_node("b", "Y", &[("hp", ComponentValue::Int(20))]));
+        assert_eq!(
+            scene.find_node("a").map(|n| n.type_name.as_str()),
+            Some("X")
+        );
+        assert!(scene.find_node("missing").is_none());
+    }
+
+    #[test]
+    fn next_spawn_id_increments_counter() {
+        let mut scene = Scene {
+            kind: SCENE_KIND.to_string(),
+            name: "s".to_string(),
+            nodes: Vec::new(),
+            spawn_counter: 0,
+        };
+        assert_eq!(scene.next_spawn_id("Enemy"), "Enemy_0");
+        assert_eq!(scene.next_spawn_id("Enemy"), "Enemy_1");
+        assert_eq!(scene.next_spawn_id("Tower"), "Tower_2");
+    }
+
+    #[test]
+    fn set_and_get_component_value_round_trips() {
+        let mut node = make_node("a", "X", &[("hp", ComponentValue::Int(10))]);
+        assert_eq!(
+            node.get_component_value("hp"),
+            Some(&ComponentValue::Int(10))
+        );
+        node.set_component_value("hp", ComponentValue::Int(99))
+            .unwrap();
+        assert_eq!(
+            node.get_component_value("hp"),
+            Some(&ComponentValue::Int(99))
+        );
+    }
+
+    #[test]
+    fn set_component_value_errors_on_missing_key() {
+        let mut node = make_node("a", "X", &[("hp", ComponentValue::Int(10))]);
+        let err = node
+            .set_component_value("mana", ComponentValue::Int(5))
+            .unwrap_err();
+        assert!(matches!(err, EngineError::Validation { .. }));
     }
 }

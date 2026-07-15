@@ -82,6 +82,22 @@ impl Engine {
         self.scene = Some(scene);
     }
 
+    pub fn scene(&self) -> Option<&Scene> {
+        self.scene.as_ref()
+    }
+
+    pub fn scene_mut(&mut self) -> Option<&mut Scene> {
+        self.scene.as_mut()
+    }
+
+    pub fn signal_bus(&self) -> &SignalBus {
+        &self.bus
+    }
+
+    pub fn signal_bus_mut(&mut self) -> &mut SignalBus {
+        &mut self.bus
+    }
+
     pub fn list_systems(&self) -> Vec<SystemInfo> {
         self.systems.list()
     }

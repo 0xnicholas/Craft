@@ -5,15 +5,17 @@
 **Supersedes**: ADR 0003's single-tier behavior model (JSON-only). Introduces two-tier model.
 **Reference**: Godot GDScript — equivalent capability with industry-standard language
 
+> **Update 2026-07-15**: Implementation ships on **Lua 5.4** (not 5.5 as originally specified). Lua 5.5 is not yet packaged by Homebrew/Linux distros as of this writing; Lua 5.4 is the most widely deployed stable Lua and is the de-facto target of `mlua` 0.12. All other decisions in this ADR (mlua, two-tier model, sandbox, Godot parity, LuaRocks) are unchanged.
+
 ## Context
 
 ADR 0003 defined a closed-set JSON behavior system with 9 action verbs and 3 behavior primitives (state machine, on_tick, on_signal). This system is AI-native — structured, schema-validated, deterministic. But it is not a human-friendly scripting language. It lacks loops, variables, functions, closures, coroutines, metaprogramming, and module systems.
 
-The human editor (ADR 0017+) needs a scripting experience equivalent to Godot's Script Editor. Godot solved this with GDScript, a custom language. Craft uses **Lua 5.5** — an industry-standard language already used in game development (World of Warcraft, Roblox/Luau, Factorio, Balatro, Core Keeper).
+The human editor (ADR 0017+) needs a scripting experience equivalent to Godot's Script Editor. Godot solved this with GDScript, a custom language. Craft uses **Lua 5.4** — an industry-standard language already used in game development (World of Warcraft, Roblox/Luau, Factorio, Balatro, Core Keeper). *(Originally specified as Lua 5.5; downgraded to 5.4 for packaging availability — see top of ADR.)*
 
 ## Decision
 
-**Lua 5.5 embedded via `mlua` v0.12 as a first-class scripting language, forming a two-tier behavior model with JSON behaviors.**
+**Lua 5.4 embedded via `mlua` v0.12 as a first-class scripting language, forming a two-tier behavior model with JSON behaviors.**
 
 ### Two-Tier Behavior Model
 
@@ -280,7 +282,7 @@ PRD §3.2 lists "Lua / Python / GDScript-style embedded scripting" as a v1 non-g
 
 1. **Lua is proven in gamedev**: World of Warcraft (Lua since 2004), Roblox (Luau), Factorio, Balatro, Core Keeper — all ship Lua scripting for game logic. It is the industry standard for embeddable game scripting.
 
-2. **mlua supports Lua 5.5**: The latest Lua release (2025-12-15) with improved interpreter performance and GC. mlua v0.12 (2026-07-05) has first-class support via `features = ["lua55"]`.
+2. **mlua supports Lua 5.4**: Lua 5.4 is the de-facto standard in Rust gamedev via `mlua`. mlua v0.12 supports it via `features = ["lua54"]`. *(5.5 was the original target but is not yet widely packaged.)*
 
 3. **Field syntax → GDScript parity**: `node.position` instead of `node:get("position")` is not cosmetic. It makes Lua scripts read like GDScript, which is Godot's primary UX advantage. Achieved via `__index`/`__newindex` metatables on Node userdata.
 
@@ -294,7 +296,7 @@ PRD §3.2 lists "Lua / Python / GDScript-style embedded scripting" as a v1 non-g
 
 | Godot | Craft Lua |
 |-------|-----------|
-| GDScript (custom language, 30+ files) | Lua 5.5 (standard language, `mlua` crate) |
+| GDScript (custom language, 30+ files) | Lua 5.4 (standard language, `mlua` crate) |
 | `_process(delta)` per node | `Enemy:on_tick()` per Lua instance |
 | `_on_signal_name(args)` per node | `Enemy:on_signal(signal_name, args)` unified handler |
 | `_ready()` / `_enter_tree()` | `Enemy:on_spawn()` |
