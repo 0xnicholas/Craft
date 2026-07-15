@@ -1,0 +1,140 @@
+{
+  "name": "03_state_machine",
+  "description": "Machine transitions through states via counter. Initial=0; at count=1 transitions to s1; at count=2 transitions to s2 (done).",
+  "seed": 0,
+  "ticks": 5,
+  "scene": {
+    "kind": "scene",
+    "name": "bench03",
+    "nodes": [
+      {
+        "id": "m1",
+        "type": "Machine",
+        "components": {
+          "state_code": {
+            "type": "Int",
+            "value": 0
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "state_machine",
+            "initial": "s0",
+            "states": {
+              "s0": {
+                "on_enter": [],
+                "on_tick": [
+                  {
+                    "kind": "set_state",
+                    "target": {
+                      "kind": "self"
+                    },
+                    "key": "state_code",
+                    "value": {
+                      "type": "Int",
+                      "value": 1
+                    }
+                  }
+                ],
+                "transitions": [
+                  {
+                    "to": "s1",
+                    "when": {
+                      "eq": [
+                        {
+                          "ref": "self.state_code"
+                        },
+                        {
+                          "type": "Int",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "s1": {
+                "on_enter": [],
+                "on_tick": [
+                  {
+                    "kind": "set_state",
+                    "target": {
+                      "kind": "self"
+                    },
+                    "key": "state_code",
+                    "value": {
+                      "type": "Int",
+                      "value": 2
+                    }
+                  }
+                ],
+                "transitions": [
+                  {
+                    "to": "s2",
+                    "when": {
+                      "eq": [
+                        {
+                          "ref": "self.state_code"
+                        },
+                        {
+                          "type": "Int",
+                          "value": 2
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "s2": {
+                "on_enter": [],
+                "on_tick": [],
+                "transitions": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "p1",
+        "type": "Probe",
+        "components": {
+          "count": {
+            "type": "Int",
+            "value": 0
+          },
+          "position": {
+            "type": "Vec2",
+            "value": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "behaviors": []
+      }
+    ],
+    "spawn_counter": 0
+  },
+  "actions_per_tick": [],
+  "expected_final_hash": 1625421687987587966,
+  "expected_components": {
+    "m1": {
+      "state_code": {
+        "type": "Int",
+        "value": 2
+      }
+    },
+    "p1": {
+      "count": {
+        "type": "Int",
+        "value": 0
+      }
+    }
+  },
+  "expected_signals_emitted": [
+    "state:exit:s0",
+    "state:enter:s1",
+    "state:exit:s1",
+    "state:enter:s2"
+  ]
+}

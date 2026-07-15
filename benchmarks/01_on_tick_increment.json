@@ -1,0 +1,63 @@
+{
+  "name": "01_on_tick_increment",
+  "description": "Probe increments 'count' once per tick via on_tick move action. After 10 ticks, count == 10.",
+  "seed": 0,
+  "ticks": 10,
+  "scene": {
+    "kind": "scene",
+    "name": "bench01",
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "Probe",
+        "components": {
+          "count": {
+            "type": "Int",
+            "value": 0
+          },
+          "position": {
+            "type": "Vec2",
+            "value": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "behaviors": [
+          {
+            "kind": "on_tick",
+            "actions": [
+              {
+                "kind": "move",
+                "target": {
+                  "kind": "self"
+                },
+                "key": "count",
+                "by": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "spawn_counter": 0
+  },
+  "actions_per_tick": [],
+  "expected_final_hash": 16699296236122213873,
+  "expected_components": {
+    "p1": {
+      "count": {
+        "type": "Int",
+        "value": 10
+      },
+      "position": {
+        "type": "Vec2",
+        "value": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "expected_signals_emitted": []
+}

@@ -1,0 +1,15 @@
+[package]
+name = "tower_defense"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+craft-kernel = { path = "../../crates/craft-kernel" }
+craft-replay = { path = "../../crates/craft-replay" }
+craft-macros = { path = "../../crates/craft-macros" }
+serde_json = { workspace = true }
+
+[dev-dependencies]

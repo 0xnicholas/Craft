@@ -1,0 +1,17 @@
+[package]
+name = "craft-eval"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+craft-kernel = { path = "../craft-kernel" }
+craft-replay = { path = "../craft-replay" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "craft-eval"
+path = "src/bin/eval.rs"

@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/craft-kernel",
+    "crates/craft-macros",
+    "crates/craft-replay",
+    "crates/craft-bridge",
+    "crates/craft-schema",
+    "crates/craft-terminal",
+    "crates/craft-eval",
+    "games/tower_defense",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+thiserror = "1"
+toml = "0.8"
+inventory = "0.3"
+notify = "6"
+bitflags = "2"
+
+craft-macros = { path = "crates/craft-macros" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

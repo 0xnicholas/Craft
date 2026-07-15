@@ -1,0 +1,8 @@
+[project]
+name = "tower_defense"
+entry_scene = "res://games/tower_defense/scene.json"
+seed = 1
+tick_hz = 60
+
+[paths]
+res_root = "."
