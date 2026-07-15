@@ -9,6 +9,16 @@ use craft_kernel::{
     behavior::Expression,
 };
 
+/// Summary of Lua module bindings captured at recording start (ADR 0016
+/// §"L3"). Each entry records the module name, version, and SHA-256 of
+/// its source so replays can detect drift.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModuleRecord {
+    pub name: String,
+    pub version: String,
+    pub sha256: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InputFrame {
     pub actions: BTreeMap<String, Value>,
@@ -41,6 +51,15 @@ pub struct RecordingMeta {
     pub seed: u64,
     pub tick_hz: u32,
     pub total_ticks: u64,
+    /// Lua modules used by the recording, with their pinned versions and
+    /// content hashes. ADR 0016 §"L3". `ReplayRunner::validate_lockfile`
+    /// uses these to detect module drift between recording and replay.
+    #[serde(default)]
+    pub module_records: Vec<ModuleRecord>,
+    /// Whether the recording was made with the RNG switch locked. If
+    /// true, replays must use the same RNG seed to be deterministic.
+    #[serde(default)]
+    pub rng_locked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +101,8 @@ impl Recorder {
                     seed,
                     tick_hz: 60,
                     total_ticks: 0,
+                    module_records: Vec::new(),
+                    rng_locked: false,
                 },
                 frames: Vec::new(),
             },
@@ -89,6 +110,44 @@ impl Recorder {
             signal_ids,
             bus,
         })
+    }
+
+    /// Start a recording with module lockfile + determinism validation
+    /// (ADR 0016 §"L3"). Returns an error if any module is missing,
+    /// hash-drifted, or the RNG switch wasn't locked when required.
+    pub fn start_validated(
+        scene: &Scene,
+        seed: u64,
+        resources: &ResourceRegistry,
+        modules: &[ModuleRecord],
+        rng_locked: bool,
+    ) -> EngineResult<Self> {
+        if rng_locked {
+            for module in modules {
+                if module.name.is_empty() || module.version.is_empty() {
+                    return Err(EngineError::Internal(format!(
+                        "module record {:?} missing name or version",
+                        module.name
+                    )));
+                }
+            }
+        }
+        let mut recorder = Self::start(scene, seed, resources)?;
+        recorder.recording.meta.module_records = modules.to_vec();
+        recorder.recording.meta.rng_locked = rng_locked;
+        Ok(recorder)
+    }
+
+    pub fn module_records(&self) -> &[ModuleRecord] {
+        &self.recording.meta.module_records
+    }
+
+    pub fn rng_locked(&self) -> bool {
+        self.recording.meta.rng_locked
+    }
+
+    pub fn recording(&self) -> &Recording {
+        &self.recording
     }
 
     pub fn record_tick(
@@ -275,6 +334,55 @@ impl ReplayRunner {
         })
     }
 
+    /// Validate the recorded module bindings against a freshly-computed
+    /// set (ADR 0016 §"L3"). Returns the list of mismatches; an empty
+    /// list means the lockfile is consistent with the recording.
+    pub fn validate_module_records(&self, current: &[ModuleRecord]) -> Vec<String> {
+        let mut mismatches = Vec::new();
+        let recorded: BTreeMap<&str, &ModuleRecord> = self
+            .recording
+            .meta
+            .module_records
+            .iter()
+            .map(|m| (m.name.as_str(), m))
+            .collect();
+        let current_map: BTreeMap<&str, &ModuleRecord> =
+            current.iter().map(|m| (m.name.as_str(), m)).collect();
+        for (name, rec) in &recorded {
+            match current_map.get(name) {
+                Some(cur) => {
+                    if cur.version != rec.version {
+                        mismatches.push(format!(
+                            "module {name:?} version drift: recorded {}, current {}",
+                            rec.version, cur.version
+                        ));
+                    }
+                    if cur.sha256 != rec.sha256 {
+                        mismatches.push(format!(
+                            "module {name:?} source hash drift: recorded {}, current {}",
+                            rec.sha256, cur.sha256
+                        ));
+                    }
+                }
+                None => mismatches.push(format!(
+                    "module {name:?} was used during recording but is no longer loaded"
+                )),
+            }
+        }
+        for name in current_map.keys() {
+            if !recorded.contains_key(name) {
+                mismatches.push(format!(
+                    "module {name:?} is currently loaded but was not used during recording"
+                ));
+            }
+        }
+        mismatches
+    }
+
+    pub fn rng_locked(&self) -> bool {
+        self.recording.meta.rng_locked
+    }
+
     pub fn engine(&self) -> &Engine {
         &self.engine
     }
@@ -441,7 +549,12 @@ mod tests {
         let scene = simple_scene();
         let resources = craft_kernel::ResourceRegistry::new();
         let mut recorder = Recorder::start(&scene, 42, &resources).expect("start");
-        recorder.record_tick(0, &InputFrame::empty(), 100, vec![("hello".to_string(), serde_json::Value::Null)]);
+        recorder.record_tick(
+            0,
+            &InputFrame::empty(),
+            100,
+            vec![("hello".to_string(), serde_json::Value::Null)],
+        );
         recorder.record_tick(1, &InputFrame::empty(), 200, vec![]);
         let recording = recorder.finish();
 

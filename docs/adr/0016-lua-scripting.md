@@ -278,6 +278,16 @@ This mirrors GDScript's philosophy — development speed > mathematical purity �
 
 PRD §3.2 lists "Lua / Python / GDScript-style embedded scripting" as a v1 non-goal. This ADR defines Lua for v1/v2 scope — the two-tier behavior model allows Lua to ship alongside JSON behaviors. The PRD's exclusion was based on the original single-tier thesis (JSON-only for AI agents). Adding Lua as a second tier preserves the agent path while expanding to human authors. See ADR 0003 for the updated two-tier tick loop.
 
+## L3 Implementation Notes (2026-07-16)
+
+L3 was implemented with a workspace-relative module loader (mlua `package.searchers[1]`) and TOML lockfile rather than the LuaRocks CLI. Rationale:
+
+- **Sandboxing alignment**: the package.searchers entry reads only from `<modules_dir>`, which the host controls. The LuaRocks CLI's default `path` resolution pulls from `/usr/local/share/lua/5.4/...` which the sandbox disallows.
+- **Reproducibility**: TOML file is committed to source control, validated by `runtime.validate_lockfile()`, and embedded into `RecordingMeta.module_records` for replay-time drift detection.
+- **Distinction**: the on-disk *file* is referred to as `luarocks.lock` for consistency with the ADR; the runtime type is `craft_lua::Lockfile`.
+
+The 3 determinism switches are independent booleans; `DeterminismMode` is a fixed combination. Only the `rng` switch is currently auto-imposed in `Recording` mode and enforced at the kernel boundary; `float` and `order` are scaffolded types today and the actual enforcement (NaN/inf rejection, sorted iteration) is tracked as future work.
+
 ## Rationale
 
 1. **Lua is proven in gamedev**: World of Warcraft (Lua since 2004), Roblox (Luau), Factorio, Balatro, Core Keeper — all ship Lua scripting for game logic. It is the industry standard for embeddable game scripting.

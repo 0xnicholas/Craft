@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use mlua::prelude::*;
@@ -10,6 +11,8 @@ use craft_kernel::{ComponentValue, Engine, Scene, SignalBus};
 
 use crate::bindings::{NodeRef, build_node};
 use crate::class::{ClassDef, probe_hooks};
+use crate::determinism::{DeterminismMode, DeterminismState, DeterminismSwitches, RecordingLog};
+use crate::modules::{LockEntry, Lockfile, ModuleLoader};
 use crate::query::QueryRegistry;
 
 pub type ScriptError = LuaError;
@@ -30,6 +33,9 @@ pub struct LuaRuntime {
     run_generation: Rc<RefCell<u64>>,
     classes: HashMap<String, ClassDef>,
     bindings: HashMap<String, NodeBinding>,
+    module_loader: Option<ModuleLoader>,
+    loaded_modules: HashMap<String, (String, String)>,
+    determinism: Rc<RefCell<DeterminismState>>,
 }
 
 impl LuaRuntime {
@@ -53,6 +59,9 @@ impl LuaRuntime {
             run_generation: Rc::new(RefCell::new(0)),
             classes: HashMap::new(),
             bindings: HashMap::new(),
+            module_loader: None,
+            loaded_modules: HashMap::new(),
+            determinism: Rc::new(RefCell::new(DeterminismState::default())),
         })
     }
 
@@ -284,15 +293,9 @@ impl LuaRuntime {
                 scene_handle.clone(),
                 Rc::clone(&self.run_generation),
             );
-            let ud = self
-                .vm
-                .create_userdata(node_ref)
-                ?;
+            let ud = self.vm.create_userdata(node_ref)?;
             let binding = self.bindings.get(&node_id).expect("checked above");
-            binding
-                .self_table
-                .set("node", LuaValue::UserData(ud))
-                ?;
+            binding.self_table.set("node", LuaValue::UserData(ud))?;
             self.call_hook(binding, "on_tick", ())?;
         }
         Ok(())
@@ -332,15 +335,9 @@ impl LuaRuntime {
                 scene_handle.clone(),
                 Rc::clone(&self.run_generation),
             );
-            let ud = self
-                .vm
-                .create_userdata(node_ref)
-                ?;
+            let ud = self.vm.create_userdata(node_ref)?;
             let binding = self.bindings.get(&node_id).expect("checked above");
-            binding
-                .self_table
-                .set("node", LuaValue::UserData(ud))
-                ?;
+            binding.self_table.set("node", LuaValue::UserData(ud))?;
             self.call_hook(binding, "on_signal", (signal_name, args_lua.clone()))?;
         }
         Ok(())
@@ -376,14 +373,8 @@ impl LuaRuntime {
             scene_handle,
             Rc::clone(&self.run_generation),
         );
-        let ud = self
-            .vm
-            .create_userdata(node_ref)
-            ?;
-        binding
-            .self_table
-            .set("node", LuaValue::UserData(ud))
-            ?;
+        let ud = self.vm.create_userdata(node_ref)?;
+        binding.self_table.set("node", LuaValue::UserData(ud))?;
         self.call_hook(binding, "on_spawn", ())
     }
 
@@ -393,12 +384,216 @@ impl LuaRuntime {
     {
         let func: Option<LuaFunction> = binding.self_table.get(hook).ok();
         if let Some(f) = func {
-            // Methods defined with `function Class:method()` have an implicit
-            // `self` first parameter. Calling `func()` would leave that
-            // parameter nil; we must pass the instance table explicitly.
             let _: () = f.call((binding.self_table.clone(), args))?;
         }
         Ok(())
+    }
+
+    pub fn set_modules_dir(&mut self, dir: PathBuf) {
+        let lockfile = self
+            .module_loader
+            .as_ref()
+            .map(|l| l.lockfile.clone())
+            .unwrap_or_default();
+        self.module_loader = Some(ModuleLoader {
+            modules_dir: dir,
+            lockfile,
+        });
+        self.install_require_searcher();
+    }
+
+    pub fn module_loader(&self) -> Option<&ModuleLoader> {
+        self.module_loader.as_ref()
+    }
+
+    pub fn load_lockfile_from_path(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+        let loader = self.module_loader.as_mut().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "set_modules_dir() must be called before load_lockfile",
+            )
+        })?;
+        loader.load_lockfile_from_path(path)?;
+        self.install_require_searcher();
+        Ok(())
+    }
+
+    pub fn write_lockfile_to_path(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let loader = self.module_loader.as_ref().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "set_modules_dir() must be called before write_lockfile",
+            )
+        })?;
+        loader.write_lockfile_to_path(path)
+    }
+
+    pub fn validate_lockfile(&self) -> Result<(), String> {
+        match self.module_loader.as_ref() {
+            Some(l) => l.validate_lockfile(),
+            None => Err("no module loader configured; call set_modules_dir first".to_string()),
+        }
+    }
+
+    pub fn lock_dependencies(&mut self) -> Lockfile {
+        let lockfile = match self.module_loader.as_ref() {
+            Some(loader) => loader.build_lockfile(&self.loaded_modules),
+            None => Lockfile::empty(),
+        };
+        if let Some(loader) = self.module_loader.as_mut() {
+            loader.lockfile = lockfile.clone();
+        }
+        lockfile
+    }
+
+    pub fn lockfile(&self) -> Option<Lockfile> {
+        self.module_loader.as_ref().map(|l| l.lockfile.clone())
+    }
+
+    pub fn loaded_module_count(&self) -> usize {
+        self.loaded_modules.len()
+    }
+
+    pub fn record_module(
+        &mut self,
+        name: &str,
+        version: &str,
+        source: &str,
+    ) -> Result<(), ScriptError> {
+        let module_name = name.to_string();
+        let source_str = source.to_string();
+        self.loaded_modules.insert(
+            module_name.clone(),
+            (version.to_string(), source_str.clone()),
+        );
+        let package: LuaTable = self.vm.globals().get("package")?;
+        let loaded: LuaTable = package.get("loaded")?;
+        loaded.set(module_name.as_str(), source_str)?;
+        let hash = crate::modules::sha256_of_str(source);
+        if let Some(loader) = self.module_loader.as_mut() {
+            let rel = module_name
+                .split('.')
+                .collect::<PathBuf>()
+                .with_extension("lua");
+            let path = loader.modules_dir.join(&rel);
+            let entry = LockEntry {
+                name: module_name.clone(),
+                version: version.to_string(),
+                path,
+                sha256: hash,
+            };
+            if !loader.lockfile.entries.iter().any(|e| e.name == entry.name) {
+                loader.lockfile.entries.push(entry);
+            }
+        }
+        Ok(())
+    }
+
+    fn install_require_searcher(&self) {
+        let Some(loader) = self.module_loader.as_ref().cloned() else {
+            return;
+        };
+        let loader_rc = Rc::new(loader);
+
+        let loaded_rc = Rc::new(RefCell::new(HashMap::<String, LuaValue>::new()));
+        let loaded_for_searcher = Rc::clone(&loaded_rc);
+        let result: LuaResult<LuaFunction> =
+            self.vm.create_function(move |lua_ctx, name: String| {
+                let loader = loader_rc.as_ref();
+                let path = match loader.resolve_path(&name) {
+                    Some(p) => p,
+                    None => {
+                        return Err(LuaError::external(format!(
+                            "module {name:?} not found in modules dir"
+                        )));
+                    }
+                };
+                if let Err(e) = loader.validate_lockfile_for(&name, &path) {
+                    return Err(LuaError::external(e));
+                }
+                if let Some(cached) = loaded_for_searcher.borrow().get(&name).cloned() {
+                    return Ok(cached);
+                }
+                let contents = std::fs::read_to_string(&path).map_err(|e| {
+                    LuaError::external(format!(
+                        "require({name}): cannot read {}: {e}",
+                        path.display()
+                    ))
+                })?;
+                let chunk = lua_ctx.load(&contents).set_name(&name).into_function()?;
+                let loaded: LuaValue = chunk.call(())?;
+                loaded_for_searcher
+                    .borrow_mut()
+                    .insert(name, loaded.clone());
+                Ok(loaded)
+            });
+        let Ok(searcher) = result else {
+            return;
+        };
+        let _ = self.vm.globals().set("require", searcher);
+    }
+
+    pub fn set_determinism(&mut self, mode: DeterminismMode) -> Result<(), ScriptError> {
+        let switches = mode.switches();
+        self.determinism.borrow_mut().switches = switches;
+        self.determinism.borrow_mut().mode = Some(mode);
+
+        let math_table: LuaTable = self.vm.globals().get("math")?;
+        if switches.rng {
+            let state = Rc::clone(&self.rng_state);
+            let det = Rc::clone(&self.determinism);
+            let rng_fn = self.vm.create_function(move |_, (lo, hi): (i64, i64)| {
+                if lo > hi {
+                    return Err(LuaError::external(format!(
+                        "engine.rng(lo, hi) requires lo <= hi, got lo={lo} hi={hi}"
+                    )));
+                }
+                let span = (hi as i128) - (lo as i128) + 1;
+                if span > (u64::MAX as i128) {
+                    return Err(LuaError::external(format!(
+                        "engine.rng range [{lo}, {hi}] exceeds u64 span"
+                    )));
+                }
+                let mut st = state.borrow_mut();
+                *st = st.wrapping_mul(RNG_MUL).wrapping_add(RNG_INC);
+                let range = span as u64;
+                let offset = *st % range;
+                {
+                    let mut det_b = det.borrow_mut();
+                    det_b
+                        .recording
+                        .record_call("engine.rng", format!("{lo},{hi}"));
+                }
+                Ok(lo + offset as i64)
+            })?;
+            math_table.set("random", rng_fn.clone())?;
+            math_table.set("randomseed", rng_fn)?;
+        } else {
+            math_table.set("random", LuaValue::Nil)?;
+            math_table.set("randomseed", LuaValue::Nil)?;
+        }
+        Ok(())
+    }
+
+    pub fn switches(&self) -> DeterminismSwitches {
+        self.determinism.borrow().switches
+    }
+
+    pub fn determinism_mode(&self) -> Option<DeterminismMode> {
+        self.determinism.borrow().mode
+    }
+
+    pub fn recording_log(&self) -> RecordingLog {
+        self.determinism.borrow().recording.clone()
+    }
+
+    pub fn take_recording_log(&self) -> RecordingLog {
+        let mut d = self.determinism.borrow_mut();
+        std::mem::take(&mut d.recording)
+    }
+
+    pub fn clear_recording_log(&self) {
+        self.determinism.borrow_mut().recording.clear();
     }
 }
 
@@ -519,13 +714,11 @@ fn sandbox_vm(vm: &Lua) -> LuaResult<()> {
     globals.set("loadfile", LuaValue::Nil)?;
     globals.set("load", LuaValue::Nil)?;
     globals.set("loadstring", LuaValue::Nil)?;
-    globals.set("require", LuaValue::Nil)?;
 
     let package: LuaTable = globals.get("package")?;
     package.set("loadlib", LuaValue::Nil)?;
     package.set("cpath", LuaValue::Nil)?;
-    package.set("searchers", LuaValue::Nil)?;
-    package.set("loaders", LuaValue::Nil)?;
+    package.set("cpathcpath", LuaValue::Nil)?;
     package.set("preload", vm.create_table()?)?;
 
     let math: LuaTable = globals.get("math")?;

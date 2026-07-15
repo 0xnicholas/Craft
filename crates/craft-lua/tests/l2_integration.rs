@@ -287,7 +287,6 @@ fn reload_class_without_prior_load_errors() {
 
 #[test]
 fn engine_tick_fires_lua_pre_pass_before_json_behaviors() {
-    
     use craft_lua::{LuaEngineHook, LuaRuntime};
 
     let mut runtime = LuaRuntime::new(0).unwrap();
@@ -332,7 +331,6 @@ end
 
 #[test]
 fn engine_dispatch_signal_calls_lua_on_signal_with_args() {
-    
     use craft_lua::{LuaEngineHook, LuaRuntime};
 
     let mut runtime = LuaRuntime::new(0).unwrap();
