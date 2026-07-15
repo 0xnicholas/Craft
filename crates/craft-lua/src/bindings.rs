@@ -141,6 +141,7 @@ pub(crate) fn build_node(
         components: map,
         behaviors: Vec::new(),
         active_state: None,
+        lua_class: None,
         destroyed: false,
     }
 }

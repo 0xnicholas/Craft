@@ -52,7 +52,7 @@ Can ship alongside v1 or as a fast-follow. Lua is a separate crate (`craft-lua`)
 | # | Deliverable | Crate(s) | ADR(s) | Status | Tests | Acceptance |
 |---|------------|----------|--------|--------|-------|------------|
 | **L1** | Lua VM + bindings | `craft-lua` | 0016 | ✅ done (Lua 5.4) | `tests/l1_integration.rs` (18) | mlua 0.12 with Lua 5.4; Node userdata with `__index`/`__newindex` field syntax; `engine.*` global API (emit, spawn, call_system, rng); sandbox enforced (io/os/debug/package.loadlib/math.random blocked) |
-| **L2** | Lua class lifecycle | `craft-lua` | 0016, 0003 (Appx C) | ⏳ pending | — | `lua_class` field loads + instantiates Lua class; `on_tick`, `on_signal`, `on_spawn` hooks; Lua pre-pass integrated into tick loop; hot reload preserves `self` table for same-class edits |
+| **L2** | Lua class lifecycle | `craft-lua` | 0016, 0003 (Appx C) | ✅ done | `tests/l2_integration.rs` (18) | `lua_class` field parsed; `load_class`/`bind_node`/`tick_pre_pass`/`dispatch_signal`/`dispatch_spawn`/`reload_class`; all 3 hooks work; Engine integration via `EngineHook` trait (Lua pre-pass fires before JSON behaviors); hot reload preserves `self` table when source uses `Foo = Foo or {}` |
 | **L3** | LuaRocks + determinism | `craft-lua` | 0016 | ⏳ pending | — | `require()` works; `luarocks.lock` enforced for recording; 3-switch determinism lock (RNG/Float/Order); `Recorder::start()` validates locks |
 
 ## v2: Editor

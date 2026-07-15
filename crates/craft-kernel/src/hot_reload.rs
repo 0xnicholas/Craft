@@ -409,6 +409,7 @@ mod tests {
             components,
             behaviors: vec![],
             active_state: None,
+            lua_class: None,
             destroyed: false,
         }
     }

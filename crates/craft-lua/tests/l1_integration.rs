@@ -31,6 +31,7 @@ fn make_scene_with_player() -> Scene {
             components,
             behaviors: Vec::new(),
             active_state: None,
+            lua_class: None,
             destroyed: false,
         }],
         spawn_counter: 0,

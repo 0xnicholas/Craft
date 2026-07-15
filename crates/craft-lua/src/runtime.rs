@@ -1,13 +1,15 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use mlua::prelude::*;
 use mlua::{Lua, LuaOptions};
 use serde_json::Value;
 
-use craft_kernel::{ComponentValue, Engine, SignalBus};
+use craft_kernel::{ComponentValue, Engine, Scene, SignalBus};
 
 use crate::bindings::{NodeRef, build_node};
+use crate::class::{ClassDef, probe_hooks};
 use crate::query::QueryRegistry;
 
 pub type ScriptError = LuaError;
@@ -15,11 +17,19 @@ pub type ScriptError = LuaError;
 const RNG_MUL: u64 = 6364136223846793005;
 const RNG_INC: u64 = 1442695040888963407;
 
+#[derive(Clone)]
+pub(crate) struct NodeBinding {
+    pub class_name: String,
+    pub self_table: LuaTable,
+}
+
 pub struct LuaRuntime {
     vm: Lua,
     queries: Rc<RefCell<QueryRegistry>>,
     rng_state: Rc<RefCell<u64>>,
     run_generation: Rc<RefCell<u64>>,
+    classes: HashMap<String, ClassDef>,
+    bindings: HashMap<String, NodeBinding>,
 }
 
 impl LuaRuntime {
@@ -41,6 +51,8 @@ impl LuaRuntime {
             queries: Rc::new(RefCell::new(QueryRegistry::new())),
             rng_state: Rc::new(RefCell::new(seed.wrapping_add(1))),
             run_generation: Rc::new(RefCell::new(0)),
+            classes: HashMap::new(),
+            bindings: HashMap::new(),
         })
     }
 
@@ -127,6 +139,267 @@ impl LuaRuntime {
         self.vm.globals().set("engine", LuaValue::Nil)?;
         Ok(())
     }
+
+    pub fn load_class(&mut self, name: &str, source: &str) -> Result<ClassDef, ScriptError> {
+        self.vm.load(source).exec()?;
+        let class_table: LuaTable = self.vm.globals().get(name).map_err(|e| {
+            LuaError::external(format!(
+                "load_class({name:?}): script did not define a global named {name:?}: {e}"
+            ))
+        })?;
+        let new_fn: LuaFunction = class_table.get("new").map_err(|e| {
+            LuaError::external(format!(
+                "load_class({name:?}): class table missing a `new` method: {e}"
+            ))
+        })?;
+        let _ = new_fn;
+        let hooks = probe_hooks(&class_table)?;
+        let def = ClassDef {
+            name: name.to_string(),
+            source: source.to_string(),
+            hooks,
+        };
+        self.classes.insert(name.to_string(), def.clone());
+        Ok(def)
+    }
+
+    pub fn reload_class(&mut self, name: &str, source: &str) -> Result<(), ScriptError> {
+        if !self.classes.contains_key(name) {
+            return Err(LuaError::external(format!(
+                "reload_class({name:?}): class not loaded; call load_class first"
+            )));
+        }
+        self.vm.load(source).exec()?;
+        let class_table: LuaTable = self.vm.globals().get(name)?;
+        let hooks = probe_hooks(&class_table)?;
+        self.classes.insert(
+            name.to_string(),
+            ClassDef {
+                name: name.to_string(),
+                source: source.to_string(),
+                hooks,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn class_count(&self) -> usize {
+        self.classes.len()
+    }
+
+    pub fn binding_count(&self) -> usize {
+        self.bindings.len()
+    }
+
+    /// Bind a scene node to a previously loaded class. Calls `class.new(node)`
+    /// to produce the per-instance `self` table and stores it. If the class
+    /// declares `on_spawn`, that hook is invoked immediately so the instance
+    /// can initialize its Lua-side state in the same call.
+    pub fn bind_node(
+        &mut self,
+        scene: &Scene,
+        node_id: &str,
+        class_name: &str,
+    ) -> Result<(), ScriptError> {
+        if scene.find_node(node_id).is_none() {
+            return Err(LuaError::external(format!(
+                "bind_node: node {node_id:?} not found in scene"
+            )));
+        }
+        let class = self.classes.get(class_name).ok_or_else(|| {
+            LuaError::external(format!(
+                "bind_node({node_id:?}, {class_name:?}): class not loaded"
+            ))
+        })?;
+        if !class.hooks.on_tick && !class.hooks.on_signal && !class.hooks.on_spawn {
+            return Err(LuaError::external(format!(
+                "bind_node({node_id:?}, {class_name:?}): class has no lifecycle hooks"
+            )));
+        }
+
+        let generation = *self.run_generation.borrow();
+        let scene_handle = SceneHandle::wrap_scene(scene, generation);
+        let node_ref = NodeRef::new(
+            node_id.to_string(),
+            scene_handle,
+            Rc::clone(&self.run_generation),
+        );
+        let node_ud = self.vm.create_userdata(node_ref)?;
+
+        let class_table: LuaTable = self.vm.globals().get(class_name)?;
+        let new_fn: LuaFunction = class_table.get("new")?;
+        let self_table: LuaTable = new_fn.call(LuaValue::UserData(node_ud))?;
+
+        let should_call_spawn = class.hooks.on_spawn;
+        self.bindings.insert(
+            node_id.to_string(),
+            NodeBinding {
+                class_name: class_name.to_string(),
+                self_table: self_table.clone(),
+            },
+        );
+
+        if should_call_spawn {
+            let binding = self.bindings.get(node_id).expect("binding just inserted");
+            self.call_hook(binding, "on_spawn", ())?;
+        }
+        Ok(())
+    }
+
+    pub fn unbind_node(&mut self, node_id: &str) -> bool {
+        self.bindings.remove(node_id).is_some()
+    }
+
+    /// Fire `on_tick` for every bound node. Each hook receives a freshly
+    /// written `self.node` so reads/writes against components see current
+    /// scene state. The previous `self.node` UserData is overwritten and
+    /// will be garbage-collected by Lua.
+    pub fn tick_pre_pass(&mut self, engine: &mut Engine) -> Result<(), ScriptError> {
+        let scene = match engine.scene_mut() {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        let generation = *self.run_generation.borrow();
+        let scene_handle = SceneHandle::wrap_scene(scene, generation);
+
+        let node_ids: Vec<String> = self.bindings.keys().cloned().collect();
+        for node_id in node_ids {
+            let Some(node) = scene.find_node(&node_id) else {
+                continue;
+            };
+            let _ = node;
+            let Some(class) = self.classes.get(
+                self.bindings
+                    .get(&node_id)
+                    .map(|b| b.class_name.as_str())
+                    .unwrap_or(""),
+            ) else {
+                continue;
+            };
+            if !class.hooks.on_tick {
+                continue;
+            }
+            let node_ref = NodeRef::new(
+                node_id.clone(),
+                scene_handle.clone(),
+                Rc::clone(&self.run_generation),
+            );
+            let ud = self
+                .vm
+                .create_userdata(node_ref)
+                ?;
+            let binding = self.bindings.get(&node_id).expect("checked above");
+            binding
+                .self_table
+                .set("node", LuaValue::UserData(ud))
+                ?;
+            self.call_hook(binding, "on_tick", ())?;
+        }
+        Ok(())
+    }
+
+    /// Fire `on_signal(name, args)` for every bound node whose class declares
+    /// the hook.
+    pub fn dispatch_signal(
+        &mut self,
+        engine: &mut Engine,
+        signal_name: &str,
+        args: &Value,
+    ) -> Result<(), ScriptError> {
+        let scene = match engine.scene_mut() {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        let generation = *self.run_generation.borrow();
+        let scene_handle = SceneHandle::wrap_scene(scene, generation);
+        let args_lua = json_to_lua_value(&self.vm, args)?;
+
+        let node_ids: Vec<String> = self.bindings.keys().cloned().collect();
+        for node_id in node_ids {
+            let class_name = match self.bindings.get(&node_id) {
+                Some(b) => b.class_name.clone(),
+                None => continue,
+            };
+            let class = match self.classes.get(&class_name) {
+                Some(c) => c,
+                None => continue,
+            };
+            if !class.hooks.on_signal {
+                continue;
+            }
+            let node_ref = NodeRef::new(
+                node_id.clone(),
+                scene_handle.clone(),
+                Rc::clone(&self.run_generation),
+            );
+            let ud = self
+                .vm
+                .create_userdata(node_ref)
+                ?;
+            let binding = self.bindings.get(&node_id).expect("checked above");
+            binding
+                .self_table
+                .set("node", LuaValue::UserData(ud))
+                ?;
+            self.call_hook(binding, "on_signal", (signal_name, args_lua.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// Fire `on_spawn` for a single bound node. Called by the engine when
+    /// a new node enters the scene (e.g. from `engine.spawn`).
+    pub fn dispatch_spawn(
+        &mut self,
+        engine: &mut Engine,
+        node_id: &str,
+    ) -> Result<(), ScriptError> {
+        let scene = match engine.scene_mut() {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        let generation = *self.run_generation.borrow();
+        let scene_handle = SceneHandle::wrap_scene(scene, generation);
+
+        let binding = match self.bindings.get(node_id) {
+            Some(b) => b,
+            None => return Ok(()),
+        };
+        let class = match self.classes.get(&binding.class_name) {
+            Some(c) => c,
+            None => return Ok(()),
+        };
+        if !class.hooks.on_spawn {
+            return Ok(());
+        }
+        let node_ref = NodeRef::new(
+            node_id.to_string(),
+            scene_handle,
+            Rc::clone(&self.run_generation),
+        );
+        let ud = self
+            .vm
+            .create_userdata(node_ref)
+            ?;
+        binding
+            .self_table
+            .set("node", LuaValue::UserData(ud))
+            ?;
+        self.call_hook(binding, "on_spawn", ())
+    }
+
+    fn call_hook<A>(&self, binding: &NodeBinding, hook: &str, args: A) -> LuaResult<()>
+    where
+        A: IntoLuaMulti,
+    {
+        let func: Option<LuaFunction> = binding.self_table.get(hook).ok();
+        if let Some(f) = func {
+            // Methods defined with `function Class:method()` have an implicit
+            // `self` first parameter. Calling `func()` would leave that
+            // parameter nil; we must pass the instance table explicitly.
+            let _: () = f.call((binding.self_table.clone(), args))?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -145,6 +418,18 @@ impl SceneHandle {
     fn wrap(scene: &mut craft_kernel::Scene, generation: u64) -> Self {
         Self {
             ptr: scene as *mut craft_kernel::Scene,
+            generation,
+        }
+    }
+
+    /// Wrap a shared `&Scene` reference. The raw pointer remains valid only
+    /// while the original borrow lives; the caller is responsible for
+    /// ensuring the borrow outlives every dereference of the returned handle
+    /// (the typical pattern is "create one handle, use it within one
+    /// function body that already holds the borrow").
+    fn wrap_scene(scene: &craft_kernel::Scene, generation: u64) -> Self {
+        Self {
+            ptr: scene as *const craft_kernel::Scene as *mut craft_kernel::Scene,
             generation,
         }
     }

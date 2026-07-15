@@ -177,8 +177,10 @@ pub fn run_benchmark(
 
     let expected_signals: std::collections::BTreeSet<String> =
         spec.expected_signals_emitted.iter().cloned().collect();
-    let observed_signals_set: std::collections::BTreeSet<String> =
-        observed_signals.iter().cloned().collect();
+    let observed_signals_set: std::collections::BTreeSet<String> = observed_signals
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     let missing: Vec<String> = expected_signals
         .difference(&observed_signals_set)
         .cloned()

@@ -53,6 +53,14 @@ pub struct Node {
     pub behaviors: Vec<Behavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_state: Option<String>,
+    /// Optional Lua class binding (ADR 0016). When set, the craft-lua
+    /// runtime instantiates the class by name and fires its on_tick /
+    /// on_signal / on_spawn hooks each tick (before JSON behaviors).
+    /// The class itself is loaded into the runtime separately via
+    /// `LuaRuntime::load_class(name, source)`; this field carries only
+    /// the class name (not a path or source).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lua_class: Option<String>,
     /// Runtime-only despawn flag. Set by `Node::mark_destroyed` so scripts
     /// can request removal mid-tick without mutating `Scene.nodes` while a
     /// behavior or Lua script may still iterate it. Persist via
@@ -76,6 +84,8 @@ impl<'de> Deserialize<'de> for Node {
             behaviors: Vec<Behavior>,
             #[serde(default)]
             active_state: Option<String>,
+            #[serde(default)]
+            lua_class: Option<String>,
         }
 
         let raw = Raw::deserialize(deserializer)?;
@@ -93,6 +103,7 @@ impl<'de> Deserialize<'de> for Node {
             components,
             behaviors: raw.behaviors,
             active_state: raw.active_state,
+            lua_class: raw.lua_class,
             destroyed: false,
         })
     }
@@ -1059,6 +1070,7 @@ mod tests {
             components: map,
             behaviors: Vec::new(),
             active_state: None,
+            lua_class: None,
             destroyed: false,
         }
     }

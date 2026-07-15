@@ -96,16 +96,19 @@ impl Recorder {
         tick: u64,
         input: &InputFrame,
         state_hash: u64,
-        signals: Vec<String>,
+        signals: Vec<(String, serde_json::Value)>,
     ) {
         if !self.is_recording {
             return;
         }
         let records: Vec<SignalRecord> = signals
             .into_iter()
-            .map(|name| SignalRecord {
-                args: BTreeMap::new(),
-                name,
+            .map(|(name, args_value)| {
+                let args = match args_value {
+                    Value::Object(map) => map.into_iter().collect(),
+                    _ => BTreeMap::new(),
+                };
+                SignalRecord { args, name }
             })
             .collect();
         self.recording.frames.push(TickReport {
@@ -438,7 +441,7 @@ mod tests {
         let scene = simple_scene();
         let resources = craft_kernel::ResourceRegistry::new();
         let mut recorder = Recorder::start(&scene, 42, &resources).expect("start");
-        recorder.record_tick(0, &InputFrame::empty(), 100, vec!["hello".to_string()]);
+        recorder.record_tick(0, &InputFrame::empty(), 100, vec![("hello".to_string(), serde_json::Value::Null)]);
         recorder.record_tick(1, &InputFrame::empty(), 200, vec![]);
         let recording = recorder.finish();
 
@@ -594,12 +597,20 @@ mod tests {
         let scene = simple_scene();
         let resources = craft_kernel::ResourceRegistry::new();
         let mut recorder = Recorder::start(&scene, 0, &resources).expect("start");
-        recorder.record_tick(0, &InputFrame::empty(), 100, vec!["tower_fire".to_string()]);
+        recorder.record_tick(
+            0,
+            &InputFrame::empty(),
+            100,
+            vec![("tower_fire".to_string(), serde_json::Value::Null)],
+        );
         recorder.record_tick(
             1,
             &InputFrame::empty(),
             200,
-            vec!["tower_fire".to_string(), "enemy_died".to_string()],
+            vec![
+                ("tower_fire".to_string(), serde_json::Value::Null),
+                ("enemy_died".to_string(), serde_json::Value::Null),
+            ],
         );
         let recording = recorder.finish();
         let runner = ReplayRunner::new(recording).expect("runner");

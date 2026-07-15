@@ -2,6 +2,7 @@ pub mod behavior;
 pub mod engine;
 pub mod error;
 pub mod evaluator;
+pub mod hook;
 pub mod hot_reload;
 pub mod lint;
 pub mod project;
@@ -26,6 +27,7 @@ pub use evaluator::{
     apply_commands_with_animations, evaluate_action, evaluate_behaviors, evaluate_dry_run,
     resolve_target,
 };
+pub use hook::EngineHook;
 pub use hot_reload::{
     ComponentChange, HotReloadResult, HotReloader, SceneDiff, apply_scene_diff, compute_scene_diff,
     hot_reload_scene, reload_from_path,

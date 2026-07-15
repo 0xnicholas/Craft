@@ -1,6 +1,7 @@
 use crate::behavior::{Action, ActionCommand, Behavior};
 use crate::error::EngineResult;
 use crate::evaluator::{Animation, SceneState, Trigger, apply_commands, evaluate_behaviors};
+use crate::hook::EngineHook;
 use crate::lint::{LintWarning, lint};
 use crate::render::{ComponentView, NullRenderer, Render};
 use crate::resource::ResourceRegistry;
@@ -25,9 +26,16 @@ pub struct Engine {
     pub scene: Option<Scene>,
     pub logs: Vec<crate::evaluator::LogEntry>,
     pub animations: SceneState,
-    pub pending_signals: Vec<String>,
+    /// Signals queued for dispatch in the next tick. Each entry carries
+    /// the signal name and the JSON payload that was emitted, so that
+    /// external hooks (e.g. Lua on_signal) receive the same args that
+    /// JSON handlers see.
+    pub pending_signals: Vec<(String, serde_json::Value)>,
     pub renderer: Box<dyn Render>,
     pub render_each_tick: bool,
+    /// Optional host-side hook (e.g. craft-lua) that participates in the
+    /// tick loop and signal dispatch. See `EngineHook` for the contract.
+    pub hook: Option<Box<dyn EngineHook>>,
 }
 
 impl std::fmt::Debug for Engine {
@@ -75,6 +83,7 @@ impl Engine {
             pending_signals: Vec::new(),
             renderer: Box::new(NullRenderer::new()),
             render_each_tick: false,
+            hook: None,
         }
     }
 
@@ -128,14 +137,22 @@ impl Engine {
             self.systems.run_phase(phase, &mut ctx);
         }
         let pending = std::mem::take(&mut self.pending_signals);
-        for sig in pending {
-            self.dispatch_signal(&sig);
+        for (sig, args) in pending {
+            self.dispatch_signal(&sig, &args);
+        }
+        if let Some(mut hook) = self.hook.take() {
+            hook.before_behaviors(self);
+            self.hook = Some(hook);
         }
         self.tick_behaviors();
         if self.render_each_tick {
             self.render_now();
         }
         self.tick = self.tick.wrapping_add(1);
+    }
+
+    pub fn set_hook(&mut self, hook: Option<Box<dyn EngineHook>>) {
+        self.hook = hook;
     }
 
     pub fn render_now(&mut self) {
@@ -169,7 +186,7 @@ impl Engine {
         if self.scene.is_none() {
             return;
         }
-        let mut emitted = Vec::new();
+        let mut emitted: Vec<(String, serde_json::Value)> = Vec::new();
         let all_cmds: Vec<ActionCommand>;
         {
             let scene = self.scene.as_mut().unwrap();
@@ -185,8 +202,13 @@ impl Engine {
                 ));
             }
             for cmd in &cmds {
-                if let crate::behavior::ActionCommand::Emit { signal, .. } = cmd {
-                    emitted.push(signal.clone());
+                if let crate::behavior::ActionCommand::Emit { signal, args } = cmd {
+                    let args_value = if args.is_empty() {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::to_value(args).unwrap_or(serde_json::Value::Null)
+                    };
+                    emitted.push((signal.clone(), args_value));
                 }
             }
             all_cmds = cmds;
@@ -202,7 +224,7 @@ impl Engine {
         tick_animations(&mut self.animations, self.scene.as_mut().unwrap());
     }
 
-    pub fn dispatch_signal(&mut self, signal_name: &str) {
+    pub fn dispatch_signal(&mut self, signal_name: &str, args: &serde_json::Value) {
         if let Some(scene) = &mut self.scene {
             let mut all_cmds = Vec::new();
             let snapshot: Vec<Node> = scene.nodes.clone();
@@ -231,10 +253,21 @@ impl Engine {
             let logs = apply_commands(self.scene.as_mut().unwrap(), &self.nodes, all_cmds);
             self.logs.extend(logs);
         }
+        if let Some(mut hook) = self.hook.take() {
+            hook.on_signal(self, signal_name, args);
+            self.hook = Some(hook);
+        }
     }
 
     pub fn emit(&mut self, signal_id: crate::SignalId, payload: serde_json::Value) {
         self.bus.emit(signal_id, payload);
+    }
+
+    /// Queue a signal for dispatch on the next tick. Equivalent to a JSON
+    /// behavior emitting the signal — the signal will be delivered to JSON
+    /// `on_signal` handlers and to the Lua hook in the next `tick()` call.
+    pub fn queue_signal(&mut self, signal_name: impl Into<String>, args: serde_json::Value) {
+        self.pending_signals.push((signal_name.into(), args));
     }
 
     pub fn apply_hot_reload(
@@ -273,15 +306,18 @@ impl Engine {
         }
     }
 
-    pub fn last_signals(&self) -> &[String] {
-        &self.pending_signals
+    pub fn last_signals(&self) -> Vec<String> {
+        self.pending_signals
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect()
     }
 
-    pub fn take_last_signals(&mut self) -> Vec<String> {
+    pub fn take_last_signals(&mut self) -> Vec<(String, serde_json::Value)> {
         std::mem::take(&mut self.pending_signals)
     }
 
-    pub fn clone_last_signals(&self) -> Vec<String> {
+    pub fn clone_last_signals(&self) -> Vec<(String, serde_json::Value)> {
         self.pending_signals.clone()
     }
 
