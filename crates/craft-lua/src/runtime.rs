@@ -100,12 +100,14 @@ impl LuaRuntime {
             rng_state,
             generation,
             Rc::clone(&self.run_generation),
+            Rc::clone(&self.determinism),
         )?;
         let result = self.vm.load(script).exec();
         let _ = self.uninstall_engine_api();
         result
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn install_engine_api(
         &self,
         scene: SceneHandle,
@@ -114,6 +116,7 @@ impl LuaRuntime {
         rng_state: Rc<RefCell<u64>>,
         generation: u64,
         current_generation: Rc<RefCell<u64>>,
+        determinism: Rc<RefCell<DeterminismState>>,
     ) -> LuaResult<()> {
         // Wipe any leftover engine globals (and NodeRefs bound to a prior run's
         // generation) before installing fresh ones, so a partial failure
@@ -130,13 +133,20 @@ impl LuaRuntime {
                 scene.clone(),
                 generation,
                 Rc::clone(&current_generation),
+                Rc::clone(&determinism),
             )?,
         )?;
         engine_table.set("call_system", make_call_system(&self.vm, queries)?)?;
         engine_table.set("rng", make_rng(&self.vm, rng_state)?)?;
         engine_table.set(
             "get_node",
-            make_get_node(&self.vm, scene, generation, Rc::clone(&current_generation))?,
+            make_get_node(
+                &self.vm,
+                scene,
+                generation,
+                Rc::clone(&current_generation),
+                Rc::clone(&determinism),
+            )?,
         )?;
         engine_table.set("log", make_log(&self.vm)?)?;
 
@@ -232,6 +242,7 @@ impl LuaRuntime {
             node_id.to_string(),
             scene_handle,
             Rc::clone(&self.run_generation),
+            Rc::clone(&self.determinism),
         );
         let node_ud = self.vm.create_userdata(node_ref)?;
 
@@ -292,6 +303,7 @@ impl LuaRuntime {
                 node_id.clone(),
                 scene_handle.clone(),
                 Rc::clone(&self.run_generation),
+                Rc::clone(&self.determinism),
             );
             let ud = self.vm.create_userdata(node_ref)?;
             let binding = self.bindings.get(&node_id).expect("checked above");
@@ -334,6 +346,7 @@ impl LuaRuntime {
                 node_id.clone(),
                 scene_handle.clone(),
                 Rc::clone(&self.run_generation),
+                Rc::clone(&self.determinism),
             );
             let ud = self.vm.create_userdata(node_ref)?;
             let binding = self.bindings.get(&node_id).expect("checked above");
@@ -372,6 +385,7 @@ impl LuaRuntime {
             node_id.to_string(),
             scene_handle,
             Rc::clone(&self.run_generation),
+            Rc::clone(&self.determinism),
         );
         let ud = self.vm.create_userdata(node_ref)?;
         binding.self_table.set("node", LuaValue::UserData(ud))?;
@@ -572,7 +586,108 @@ impl LuaRuntime {
             math_table.set("random", LuaValue::Nil)?;
             math_table.set("randomseed", LuaValue::Nil)?;
         }
+
+        if switches.float {
+            let det = Rc::clone(&self.determinism);
+            let craft_table = self.vm.create_table()?;
+            let det_for_is_finite = Rc::clone(&det);
+            craft_table.set(
+                "is_finite",
+                self.vm.create_function(move |_, x: f64| {
+                    Ok(det_for_is_finite.borrow().switches.float && x.is_finite())
+                })?,
+            )?;
+            let det_for_sanitize = Rc::clone(&det);
+            craft_table.set(
+                "sanitize",
+                self.vm
+                    .create_function(move |_, (x, default): (f64, Option<f64>)| {
+                        let det_b = det_for_sanitize.borrow();
+                        if det_b.switches.float && !x.is_finite() {
+                            Ok(default.unwrap_or(0.0))
+                        } else {
+                            Ok(x)
+                        }
+                    })?,
+            )?;
+            let det_for_check = Rc::clone(&det);
+            craft_table.set(
+                "require_finite",
+                self.vm.create_function(move |_, x: f64| {
+                    let det_b = det_for_check.borrow();
+                    if det_b.switches.float && !x.is_finite() {
+                        Err(LuaError::external(format!(
+                            "float lock is on: value {x} is non-finite"
+                        )))
+                    } else {
+                        Ok(x)
+                    }
+                })?,
+            )?;
+            let det_for_log = Rc::clone(&det);
+            craft_table.set(
+                "log_non_finite",
+                self.vm.create_function(move |_, (op, x): (String, f64)| {
+                    if !x.is_finite() {
+                        det_for_log
+                            .borrow_mut()
+                            .recording
+                            .record_call("craft.float.reject", format!("{op}: {x}"));
+                    }
+                    Ok(())
+                })?,
+            )?;
+            self.vm.globals().set("craft", craft_table)?;
+        } else {
+            self.vm.globals().set("craft", LuaValue::Nil)?;
+        }
+
+        if switches.order {
+            self.install_sorted_pairs()?;
+        }
         Ok(())
+    }
+
+    /// Install sorted-key `pairs()` and `ipairs()` over global tables
+    /// so that `for k, v in pairs(t)` iterates keys in a stable order
+    /// across platforms and runs. Implementation: wrap the global `pairs`
+    /// in pure Lua so it sorts keys before yielding them. Mixed-key tables
+    /// fall back to type-tag ordering to keep the comparison total.
+    fn install_sorted_pairs(&self) -> LuaResult<()> {
+        let source = r#"
+            do
+                if _G.pairs ~= nil and _G.craft_original_pairs == nil then
+                    _G.craft_original_pairs = _G.pairs
+                end
+                _G.pairs = function(t, k)
+                    if type(t) ~= "table" then
+                        return _G.craft_original_pairs(t, k)
+                    end
+                    local keys = {}
+                    for key, _ in _G.craft_original_pairs(t) do
+                        keys[#keys + 1] = key
+                    end
+                    table.sort(keys, function(a, b)
+                        local ta, tb = type(a), type(b)
+                        if ta == tb then
+                            if ta == "number" or ta == "string" then
+                                return a < b
+                            end
+                            return tostring(a) < tostring(b)
+                        end
+                        return ta < tb
+                    end)
+                    local i = 0
+                    return function()
+                        i = i + 1
+                        local key = keys[i]
+                        if key == nil then return nil end
+                        return key, t[key]
+                    end
+                end
+            end
+        "#;
+        self.vm.load(source).exec()
     }
 
     pub fn switches(&self) -> DeterminismSwitches {
@@ -744,6 +859,7 @@ fn make_spawn(
     scene: SceneHandle,
     generation: u64,
     current_generation: Rc<RefCell<u64>>,
+    determinism: Rc<RefCell<DeterminismState>>,
 ) -> LuaResult<LuaFunction> {
     vm.create_function(move |lua, (type_name, components): (String, LuaTable)| {
         let comp_pairs = read_components(&components)?;
@@ -759,6 +875,7 @@ fn make_spawn(
             id,
             scene.clone(),
             Rc::clone(&current_generation),
+            Rc::clone(&determinism),
         ))?;
         Ok(LuaValue::UserData(ud))
     })
@@ -806,6 +923,7 @@ fn make_get_node(
     scene: SceneHandle,
     generation: u64,
     current_generation: Rc<RefCell<u64>>,
+    determinism: Rc<RefCell<DeterminismState>>,
 ) -> LuaResult<LuaFunction> {
     vm.create_function(move |lua, id: String| {
         let exists = scene
@@ -816,6 +934,7 @@ fn make_get_node(
                 id,
                 scene.clone(),
                 Rc::clone(&current_generation),
+                Rc::clone(&determinism),
             ))?;
             Ok(LuaValue::UserData(ud))
         } else {

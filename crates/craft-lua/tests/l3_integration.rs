@@ -300,3 +300,161 @@ fn validate_lockfile_without_modules_dir_errors() {
     let err = runtime.validate_lockfile().expect_err("must error");
     assert!(err.contains("set_modules_dir"));
 }
+
+#[test]
+fn float_lock_exposes_craft_table_with_is_finite_sanitize() {
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime.set_determinism(DeterminismMode::Replay).unwrap();
+    runtime
+        .run(
+            &mut empty_engine(),
+            r#"
+            assert(type(craft) == "table", "craft table must be exposed when float lock is on")
+            assert(craft.is_finite(1.5) == true, "1.5 must be finite")
+            assert(craft.is_finite(0/0) == false, "NaN must not be finite")
+            assert(craft.sanitize(0/0, 0) == 0, "NaN sanitize default 0")
+            assert(craft.sanitize(1.5, 0) == 1.5, "finite value passes through")
+            local ok = pcall(function() craft.require_finite(1/0) end)
+            assert(not ok, "inf must error under float lock")
+            "#,
+        )
+        .expect("finite validation works");
+}
+
+#[test]
+fn float_lock_rejects_non_finite_component_writes_via_noderef() {
+    use craft_kernel::{Component, ComponentKind, ComponentValue, Engine, Node, SCENE_KIND, Scene};
+    use std::collections::BTreeMap;
+    let mut map = BTreeMap::new();
+    map.insert(
+        "speed".to_string(),
+        Component {
+            value: ComponentValue::Float(1.0),
+            kind: ComponentKind::Regular,
+        },
+    );
+    let scene = Scene {
+        kind: SCENE_KIND.to_string(),
+        name: "test".to_string(),
+        nodes: vec![Node {
+            id: "p".to_string(),
+            type_name: "P".to_string(),
+            parent: None,
+            components: map,
+            behaviors: Vec::new(),
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        }],
+        spawn_counter: 0,
+    };
+    let mut engine = Engine::new();
+    engine.load_scene(scene);
+
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime.set_determinism(DeterminismMode::Replay).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            local n = engine.get_node("p")
+            local ok, err = pcall(function() n.speed = 1/0 end)
+            assert(not ok, "inf must error under float lock")
+            assert(err ~= nil, "error message must be present")
+            assert(string.find(tostring(err), "float lock", 1, true) ~= nil,
+                "expected error to mention float lock, got: " .. tostring(err))
+            "#,
+        )
+        .expect("finite rejection");
+}
+
+#[test]
+fn float_lock_off_allows_non_finite_values() {
+    use craft_kernel::{Component, ComponentKind, ComponentValue, Engine, Node, SCENE_KIND, Scene};
+    use std::collections::BTreeMap;
+    let mut map = BTreeMap::new();
+    map.insert(
+        "speed".to_string(),
+        Component {
+            value: ComponentValue::Float(1.0),
+            kind: ComponentKind::Regular,
+        },
+    );
+    let scene = Scene {
+        kind: SCENE_KIND.to_string(),
+        name: "test".to_string(),
+        nodes: vec![Node {
+            id: "p".to_string(),
+            type_name: "P".to_string(),
+            parent: None,
+            components: map,
+            behaviors: Vec::new(),
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        }],
+        spawn_counter: 0,
+    };
+    let mut engine = Engine::new();
+    engine.load_scene(scene);
+
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            local n = engine.get_node("p")
+            n.speed = 1/0
+            assert(n.speed > 1e308, "inf should be stored when float lock is off")
+            "#,
+        )
+        .expect("no enforcement when lock is off");
+}
+
+#[test]
+fn order_lock_makes_pairs_iterate_in_lexicographic_key_order() {
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime.set_determinism(DeterminismMode::Replay).unwrap();
+    runtime
+        .run(
+            &mut empty_engine(),
+            r#"
+            local t = { zzz = 1, aaa = 2, mmm = 3, ["1"] = 4, ["2"] = 5 }
+            local order = {}
+            for k, v in pairs(t) do
+                order[#order + 1] = tostring(k)
+            end
+            local str_keys = {}
+            for _, k in ipairs(order) do
+                if type(tonumber(k)) ~= "number" then
+                    str_keys[#str_keys + 1] = k
+                end
+            end
+            local sorted = { "aaa", "mmm", "zzz" }
+            for i = 1, 3 do
+                assert(str_keys[i] == sorted[i],
+                    "string keys must be in lexicographic order; got " .. tostring(str_keys[i]))
+            end
+            "#,
+        )
+        .expect("pairs must iterate sorted");
+}
+
+#[test]
+fn order_lock_off_yields_unspecified_iteration_order() {
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut empty_engine(),
+            r#"
+            local t = { zzz = 1, aaa = 2, mmm = 3 }
+            local found_any = false
+            for k, _ in pairs(t) do
+                found_any = true
+                break
+            end
+            assert(found_any, "pairs should still work without order lock")
+            "#,
+        )
+        .expect("pairs without order lock should still work");
+}

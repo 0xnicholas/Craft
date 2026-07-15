@@ -3,6 +3,7 @@ use mlua::prelude::*;
 
 use craft_kernel::{Component, ComponentKind, ComponentValue, Node};
 
+use crate::determinism::DeterminismState;
 use crate::runtime::{SceneHandle, component_value_to_lua, lua_to_component_value};
 
 #[derive(Clone)]
@@ -10,18 +11,22 @@ pub(crate) struct NodeRef {
     pub id: String,
     pub scene: SceneHandle,
     pub current_generation: std::rc::Rc<std::cell::RefCell<u64>>,
+    pub determinism: std::rc::Rc<std::cell::RefCell<DeterminismState>>,
 }
 
 impl NodeRef {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         id: String,
         scene: SceneHandle,
         current_generation: std::rc::Rc<std::cell::RefCell<u64>>,
+        determinism: std::rc::Rc<std::cell::RefCell<DeterminismState>>,
     ) -> Self {
         Self {
             id,
             scene,
             current_generation,
+            determinism,
         }
     }
 }
@@ -67,6 +72,26 @@ impl UserData for NodeRef {
             |_, node, (key, value): (String, LuaValue)| {
                 let cv = lua_to_component_value(value)?;
                 let current_gen = *node.current_generation.borrow();
+                let float_locked = node.determinism.borrow().switches.float;
+                if float_locked {
+                    match cv {
+                        ComponentValue::Float(f) if !f.is_finite() => {
+                            return Err(LuaError::external(format!(
+                                "float lock is on: refusing non-finite value when writing \
+                                 {key:?} on node {:?}",
+                                node.id
+                            )));
+                        }
+                        ComponentValue::Vec2([a, b]) if !a.is_finite() || !b.is_finite() => {
+                            return Err(LuaError::external(format!(
+                                "float lock is on: refusing non-finite vec2 component \
+                                 when writing {key:?} on node {:?}",
+                                node.id
+                            )));
+                        }
+                        _ => {}
+                    }
+                }
                 node.scene
                     .with_mut(current_gen, |s| {
                         let Some(target) = s.find_node_mut(&node.id) else {
