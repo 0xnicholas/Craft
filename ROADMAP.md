@@ -1,6 +1,6 @@
 # Roadmap
 
-**Status**: v1 engine implementation complete (`cbe66b2`). M1–M10 merged. Two open v1 exit criteria remain: engine-core coverage ≥80% and reproducible 3/4 benchmark runs.
+**Status**: v1 engine implementation complete (`61f0f0a`). M1–M10 merged. 6 of 7 v1 exit criteria satisfied; one remains: reproducible 3/4 benchmark runs.
 
 ## v1: Engine Core + Reference Game
 
@@ -42,7 +42,7 @@ M1 → M2 → M3       (engine foundation, sequential)
 - [x] `cargo test` passes all 4 test layers (ADR 0010) — 262/262 unit + integration tests
 - [x] `cargo clippy --workspace --all-targets -- -D warnings` clean
 - [x] `cargo fmt --check` clean
-- [ ] Test coverage on engine core ≥80% — **no coverage tooling configured** (need `cargo-llvm-cov` or `cargo-tarpaulin`)
+- [x] Test coverage on engine core ≥80% — `cargo-llvm-cov` baseline: **craft-kernel 80.29% line / 79.97% region**; workspace 82.19% / 82.48%; gate enforced by `scripts/coverage.sh`
 - [ ] At least 3 of 4 benchmark tasks completed by agent reproducibly — `craft-eval` runner + 4 specs exist; LLM-driven runs not yet executed
 
 ## v1.5: Lua Scripting
