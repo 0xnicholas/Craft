@@ -31,6 +31,7 @@ fn make_scene_with_player() -> Scene {
             components,
             behaviors: Vec::new(),
             active_state: None,
+            destroyed: false,
         }],
         spawn_counter: 0,
     }
@@ -170,7 +171,7 @@ fn spawn_creates_new_node_with_components() {
             r#"
             local enemy = engine.spawn("Enemy", { hp = 50, position = { 3.0, 4.0 } })
             assert(enemy ~= nil, "spawn returned nil")
-            assert(enemy.id == "Enemy_0", "expected id 'Enemy_0', got " .. tostring(enemy.id))
+            assert(enemy.id == "__spawn_Enemy_0", "expected id '__spawn_Enemy_0', got " .. tostring(enemy.id))
             assert(enemy.hp == 50, "expected hp=50")
             assert(enemy.position[1] == 3.0, "expected x=3")
             assert(enemy.position[2] == 4.0, "expected y=4")
@@ -178,7 +179,7 @@ fn spawn_creates_new_node_with_components() {
         )
         .unwrap();
     let scene = engine.scene().unwrap();
-    let enemy = scene.find_node("Enemy_0").unwrap();
+    let enemy = scene.find_node("__spawn_Enemy_0").unwrap();
     assert_eq!(enemy.type_name, "Enemy");
     assert_eq!(
         enemy.get_component_value("hp"),
@@ -187,7 +188,7 @@ fn spawn_creates_new_node_with_components() {
 }
 
 #[test]
-fn node_destroy_removes_node_from_scene() {
+fn node_destroy_marks_destroyed_then_purge_removes_it() {
     let mut engine = fresh_engine();
     let mut runtime = LuaRuntime::new(0).unwrap();
     runtime
@@ -200,6 +201,8 @@ fn node_destroy_removes_node_from_scene() {
         )
         .unwrap();
     assert!(engine.scene().unwrap().find_node("player").is_none());
+    let removed = engine.scene_mut().unwrap().purge_destroyed();
+    assert_eq!(removed, 1);
 }
 
 #[test]
@@ -366,4 +369,189 @@ fn query_registry_default_is_empty() {
     let registry = QueryRegistry::new();
     assert!(!registry.contains("anything"));
     assert_eq!(registry.names().count(), 0);
+}
+
+#[test]
+fn sandbox_preserves_safe_standard_library() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            assert(math.floor(3.7) == 3, "math.floor broken")
+            assert(math.pi > 3.14 and math.pi < 3.15, "math.pi broken")
+            assert(string.format("%d", 42) == "42", "string.format broken")
+            assert(string.upper("abc") == "ABC", "string.upper broken")
+            local t = {1, 2, 3}
+            table.insert(t, 4)
+            assert(#t == 4 and t[4] == 4, "table.insert broken")
+            local ok, err = pcall(function() error("boom") end)
+            assert(not ok, "pcall should catch errors")
+            assert(string.find(err, "boom", 1, true) ~= nil, "pcall error message lost")
+            "#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn rng_rejects_lo_greater_than_hi() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    let result = runtime.run(&mut engine, r#"engine.rng(10, 5)"#);
+    assert!(result.is_err(), "rng should error when lo > hi");
+    assert!(result.unwrap_err().to_string().contains("lo <= hi"));
+}
+
+#[test]
+fn rng_rejects_range_exceeding_u64() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    let result = runtime.run(&mut engine, r#"engine.rng(0, 18446744073709551615)"#);
+    assert!(
+        result.is_err(),
+        "rng should error when range exceeds u64 span"
+    );
+}
+
+#[test]
+fn node_id_is_read_only() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    let result = runtime.run(
+        &mut engine,
+        r#"
+        local n = engine.get_node("player")
+        n.id = "evil"
+        "#,
+    );
+    assert!(result.is_err(), "node.id should be read-only");
+    assert!(result.unwrap_err().to_string().contains("read-only"));
+    let scene = engine.scene().unwrap();
+    let player = scene.find_node("player").unwrap();
+    assert_eq!(
+        player.id, "player",
+        "id must not change after attempted write"
+    );
+    assert!(
+        !player.components.contains_key("id"),
+        "id assignment must not silently create an 'id' component"
+    );
+}
+
+#[test]
+fn vec2_rejects_mixed_table_keys() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    let result = runtime.run(
+        &mut engine,
+        r#"
+        local n = engine.get_node("player")
+        local ok, err = pcall(function() n.position = { 1.0, 2.0, foo = "bar" } end)
+        assert(not ok, "vec2 with extra keys should be rejected")
+        assert(string.find(tostring(err), "non-integer key", 1, true) ~= nil,
+            "error should mention non-integer key, got: " .. tostring(err))
+        "#,
+    );
+    assert!(
+        result.is_ok(),
+        "script-level pcall assertion failed: {result:?}"
+    );
+}
+
+#[test]
+fn emit_propagates_deep_nesting_errors() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    let result = runtime.run(
+        &mut engine,
+        r#"
+        local deep = { { { { { { { { { { 1 } } } } } } } } } } }
+        engine.emit("deep", deep)
+        "#,
+    );
+    assert!(
+        result.is_err(),
+        "over-deep payload should error, not silently null"
+    );
+}
+
+#[test]
+fn cross_run_node_ref_detects_stale_generation() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            global_cached = engine.get_node("player")
+            "#,
+        )
+        .unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            -- On a fresh run, the cached NodeRef is from a prior generation.
+            -- Touching it must refuse instead of dereferencing freed memory.
+            global_cached.hp = 99
+            "#,
+        )
+        .expect_err("stale NodeRef must not silently succeed");
+}
+
+#[test]
+fn two_node_refs_to_same_node_share_state() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            local a = engine.get_node("player")
+            local b = engine.get_node("player")
+            assert(a ~= b, "two get_node calls should return distinct userdata handles")
+            a.hp = 7
+            assert(b.hp == 7, "second handle must observe first handle's write")
+            "#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn node_ref_after_destroy_errors_on_access() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            local n = engine.get_node("player")
+            n:destroy()
+            local ok, err = pcall(function() local _ = n.hp end)
+            assert(not ok, "accessing destroyed node must error")
+            assert(string.find(tostring(err), "no longer exists", 1, true) ~= nil,
+                "expected 'no longer exists' in error: " .. tostring(err))
+            "#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn spawn_id_does_not_collide_with_user_ids() {
+    let mut engine = fresh_engine();
+    let mut runtime = LuaRuntime::new(0).unwrap();
+    runtime
+        .run(
+            &mut engine,
+            r#"
+            local e = engine.spawn("Enemy", { hp = 1 })
+            assert(e.id:sub(1, 8) == "__spawn_", "spawn id must use reserved prefix")
+            assert(e.id ~= "Enemy_0", "spawn id must not collide with user-authored Enemy_0")
+            -- Even though a user node later had id "Enemy_0", the spawn never overwrites it.
+            engine.get_node("player").hp = 50
+            assert(engine.get_node("player").hp == 50, "player untouched")
+            "#,
+        )
+        .unwrap();
 }

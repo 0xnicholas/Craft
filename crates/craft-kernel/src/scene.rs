@@ -53,6 +53,12 @@ pub struct Node {
     pub behaviors: Vec<Behavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_state: Option<String>,
+    /// Runtime-only despawn flag. Set by `Node::mark_destroyed` so scripts
+    /// can request removal mid-tick without mutating `Scene.nodes` while a
+    /// behavior or Lua script may still iterate it. Persist via
+    /// `Scene::purge_destroyed` between ticks.
+    #[serde(skip)]
+    pub destroyed: bool,
 }
 
 impl<'de> Deserialize<'de> for Node {
@@ -87,6 +93,7 @@ impl<'de> Deserialize<'de> for Node {
             components,
             behaviors: raw.behaviors,
             active_state: raw.active_state,
+            destroyed: false,
         })
     }
 }
@@ -242,11 +249,20 @@ impl Scene {
         serde_json::to_value(self).expect("scene serialization is infallible")
     }
 
+    /// Find a live (not destroyed) node by id.
     pub fn find_node(&self, id: &str) -> Option<&Node> {
-        self.nodes.iter().find(|n| n.id == id)
+        self.nodes.iter().find(|n| !n.destroyed && n.id == id)
     }
 
+    /// Find a live (not destroyed) node by id.
     pub fn find_node_mut(&mut self, id: &str) -> Option<&mut Node> {
+        self.nodes.iter_mut().find(|n| !n.destroyed && n.id == id)
+    }
+
+    /// Find a node by id regardless of `destroyed` state. Used to mark
+    /// already-destroyed nodes (no-op) or to operate on nodes that were
+    /// queued for removal by another path.
+    pub fn find_node_mut_raw(&mut self, id: &str) -> Option<&mut Node> {
         self.nodes.iter_mut().find(|n| n.id == id)
     }
 
@@ -254,14 +270,32 @@ impl Scene {
         self.nodes.push(node);
     }
 
+    /// Reserved-prefix spawn id; never collides with user-authored ids in
+    /// scene.json. `purge_destroyed` does not touch the counter.
     pub fn next_spawn_id(&mut self, type_name: &str) -> String {
-        let id = format!("{}_{}", type_name, self.spawn_counter);
+        let id = format!("__spawn_{}_{}", type_name, self.spawn_counter);
         self.spawn_counter = self.spawn_counter.wrapping_add(1);
         id
+    }
+
+    /// Physically remove all nodes marked `destroyed`. Call between ticks (or
+    /// at the end of a Lua run) to apply pending despawns. Returns the count
+    /// removed.
+    pub fn purge_destroyed(&mut self) -> usize {
+        let before = self.nodes.len();
+        self.nodes.retain(|n| !n.destroyed);
+        before - self.nodes.len()
     }
 }
 
 impl Node {
+    /// Mark this node for deferred despawn. The node will be filtered out of
+    /// `find_node` / `find_node_mut` immediately, but stays in `scene.nodes`
+    /// until `Scene::purge_destroyed` is called.
+    pub fn mark_destroyed(&mut self) {
+        self.destroyed = true;
+    }
+
     pub fn get_component_value(&self, key: &str) -> Option<&ComponentValue> {
         self.components.get(key).map(|c| &c.value)
     }
@@ -270,6 +304,12 @@ impl Node {
         self.components.get_mut(key).map(|c| &mut c.value)
     }
 
+    /// Strict write to an existing component. Returns a structured `Validation`
+    /// error if the component key is absent, mirroring the JSON scene schema's
+    /// "components must be declared in the node type" invariant. Use this from
+    /// Rust APIs that want guaranteed schemas. Lua scripts and other dynamic
+    /// callers should mutate `node.components.entry(key)` directly to allow
+    /// creating new component slots.
     pub fn set_component_value(&mut self, key: &str, value: ComponentValue) -> EngineResult<()> {
         match self.components.get_mut(key) {
             Some(component) => {
@@ -1019,6 +1059,7 @@ mod tests {
             components: map,
             behaviors: Vec::new(),
             active_state: None,
+            destroyed: false,
         }
     }
 
@@ -1047,9 +1088,9 @@ mod tests {
             nodes: Vec::new(),
             spawn_counter: 0,
         };
-        assert_eq!(scene.next_spawn_id("Enemy"), "Enemy_0");
-        assert_eq!(scene.next_spawn_id("Enemy"), "Enemy_1");
-        assert_eq!(scene.next_spawn_id("Tower"), "Tower_2");
+        assert_eq!(scene.next_spawn_id("Enemy"), "__spawn_Enemy_0");
+        assert_eq!(scene.next_spawn_id("Enemy"), "__spawn_Enemy_1");
+        assert_eq!(scene.next_spawn_id("Tower"), "__spawn_Tower_2");
     }
 
     #[test]
@@ -1074,5 +1115,77 @@ mod tests {
             .set_component_value("mana", ComponentValue::Int(5))
             .unwrap_err();
         assert!(matches!(err, EngineError::Validation { .. }));
+    }
+
+    #[test]
+    fn find_node_skips_destroyed_nodes() {
+        let mut scene = Scene {
+            kind: SCENE_KIND.to_string(),
+            name: "s".to_string(),
+            nodes: Vec::new(),
+            spawn_counter: 0,
+        };
+        scene.add_node(make_node("a", "X", &[("hp", ComponentValue::Int(10))]));
+        scene.add_node(make_node("b", "Y", &[("hp", ComponentValue::Int(20))]));
+        assert!(scene.find_node("a").is_some());
+        if let Some(node) = scene.find_node_mut_raw("a") {
+            node.mark_destroyed();
+        }
+        assert!(
+            scene.find_node("a").is_none(),
+            "find_node must skip destroyed nodes"
+        );
+        assert!(
+            scene.find_node_mut("a").is_none(),
+            "find_node_mut must skip destroyed nodes"
+        );
+        assert!(
+            scene.find_node_mut_raw("a").is_some(),
+            "find_node_mut_raw ignores destroyed flag"
+        );
+    }
+
+    #[test]
+    fn purge_destroyed_physically_removes_marked_nodes() {
+        let mut scene = Scene {
+            kind: SCENE_KIND.to_string(),
+            name: "s".to_string(),
+            nodes: Vec::new(),
+            spawn_counter: 0,
+        };
+        scene.add_node(make_node("a", "X", &[("hp", ComponentValue::Int(10))]));
+        scene.add_node(make_node("b", "Y", &[("hp", ComponentValue::Int(20))]));
+        scene.add_node(make_node("c", "Z", &[("hp", ComponentValue::Int(30))]));
+        scene.find_node_mut_raw("a").unwrap().mark_destroyed();
+        scene.find_node_mut_raw("c").unwrap().mark_destroyed();
+        let removed = scene.purge_destroyed();
+        assert_eq!(removed, 2);
+        assert_eq!(scene.nodes.len(), 1);
+        assert_eq!(scene.nodes[0].id, "b");
+    }
+
+    #[test]
+    fn set_component_value_succeeds_on_existing_key() {
+        let mut node = make_node("a", "X", &[("hp", ComponentValue::Int(10))]);
+        node.set_component_value("hp", ComponentValue::Int(99))
+            .unwrap();
+        assert_eq!(
+            node.get_component_value("hp"),
+            Some(&ComponentValue::Int(99))
+        );
+    }
+
+    #[test]
+    fn get_component_value_mut_returns_mutable_reference() {
+        let mut node = make_node("a", "X", &[("hp", ComponentValue::Int(10))]);
+        if let Some(v) = node.get_component_value_mut("hp") {
+            *v = ComponentValue::Int(77);
+        } else {
+            panic!("expected hp component");
+        }
+        assert_eq!(
+            node.get_component_value("hp"),
+            Some(&ComponentValue::Int(77))
+        );
     }
 }

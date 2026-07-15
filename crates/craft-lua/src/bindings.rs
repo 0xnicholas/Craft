@@ -9,37 +9,56 @@ use crate::runtime::{SceneHandle, component_value_to_lua, lua_to_component_value
 pub(crate) struct NodeRef {
     pub id: String,
     pub scene: SceneHandle,
+    pub current_generation: std::rc::Rc<std::cell::RefCell<u64>>,
 }
 
 impl NodeRef {
-    pub(crate) fn new(id: String, scene: SceneHandle) -> Self {
-        Self { id, scene }
+    pub(crate) fn new(
+        id: String,
+        scene: SceneHandle,
+        current_generation: std::rc::Rc<std::cell::RefCell<u64>>,
+    ) -> Self {
+        Self {
+            id,
+            scene,
+            current_generation,
+        }
     }
 }
 
 impl UserData for NodeRef {
     fn add_fields<F: LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, node| Ok(node.id.clone()));
+        fields.add_field_method_set("id", |_, _node: &mut NodeRef, _value: LuaValue| {
+            Err(LuaError::external(
+                "node id is read-only; spawn a new node to get a different id",
+            ))
+        });
     }
 
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Index, |lua, node, key: String| {
-            let value_opt = node.scene.with_ref(|s| {
+            let current_gen = *node.current_generation.borrow();
+            let lookup = node.scene.with_ref(current_gen, |s| {
                 s.find_node(&node.id)
                     .and_then(|target| target.get_component_value(&key).cloned())
             });
-            match value_opt {
-                Some(value) => component_value_to_lua(lua, &value),
-                None => node.scene.with_ref(|s| {
-                    if s.find_node(&node.id).is_some() {
-                        Ok(LuaValue::Nil)
-                    } else {
-                        Err(LuaError::external(format!(
+            match lookup {
+                Ok(Some(value)) => component_value_to_lua(lua, &value),
+                Ok(None) => {
+                    let exists = node
+                        .scene
+                        .with_ref(current_gen, |s| s.find_node(&node.id).is_some());
+                    match exists {
+                        Ok(true) => Ok(LuaValue::Nil),
+                        Ok(false) => Err(LuaError::external(format!(
                             "node \"{}\" no longer exists",
                             node.id
-                        )))
+                        ))),
+                        Err(e) => Err(LuaError::external(e)),
                     }
-                }),
+                }
+                Err(e) => Err(LuaError::external(e)),
             }
         });
 
@@ -47,39 +66,52 @@ impl UserData for NodeRef {
             LuaMetaMethod::NewIndex,
             |_, node, (key, value): (String, LuaValue)| {
                 let cv = lua_to_component_value(value)?;
-                node.scene.with_mut(|s| {
-                    let Some(target) = s.find_node_mut(&node.id) else {
-                        return Err(LuaError::external(format!(
-                            "node \"{}\" no longer exists",
-                            node.id
-                        )));
-                    };
-                    match target.components.entry(key) {
-                        std::collections::btree_map::Entry::Occupied(mut e) => {
-                            e.get_mut().value = cv;
+                let current_gen = *node.current_generation.borrow();
+                node.scene
+                    .with_mut(current_gen, |s| {
+                        let Some(target) = s.find_node_mut(&node.id) else {
+                            return Err(format!("node \"{}\" no longer exists", node.id));
+                        };
+                        match target.components.entry(key) {
+                            std::collections::btree_map::Entry::Occupied(mut e) => {
+                                e.get_mut().value = cv;
+                            }
+                            std::collections::btree_map::Entry::Vacant(e) => {
+                                e.insert(Component {
+                                    value: cv,
+                                    kind: ComponentKind::Regular,
+                                });
+                            }
                         }
-                        std::collections::btree_map::Entry::Vacant(e) => {
-                            e.insert(Component {
-                                value: cv,
-                                kind: ComponentKind::Regular,
-                            });
-                        }
-                    }
-                    Ok(())
-                })
+                        Ok(())
+                    })
+                    .map_err(LuaError::external)
             },
         );
 
         methods.add_method("destroy", |_, node, ()| {
-            node.scene.with_mut(|s| s.nodes.retain(|n| n.id != node.id));
+            let current_gen = *node.current_generation.borrow();
+            let _ = node
+                .scene
+                .with_mut(current_gen, |s| {
+                    if let Some(target) = s.find_node_mut_raw(&node.id) {
+                        target.mark_destroyed();
+                    }
+                    Ok::<(), String>(())
+                })
+                .map_err(LuaError::external)?;
             Ok(())
         });
 
         methods.add_method("has_component", |_, node, key: String| {
-            let has = node.scene.with_ref(|s| match s.find_node(&node.id) {
-                Some(target) => target.components.contains_key(&key),
-                None => false,
-            });
+            let current_gen = *node.current_generation.borrow();
+            let has = node
+                .scene
+                .with_ref(current_gen, |s| match s.find_node(&node.id) {
+                    Some(target) => target.components.contains_key(&key),
+                    None => false,
+                })
+                .unwrap_or(false);
             Ok(has)
         });
 
@@ -109,5 +141,6 @@ pub(crate) fn build_node(
         components: map,
         behaviors: Vec::new(),
         active_state: None,
+        destroyed: false,
     }
 }

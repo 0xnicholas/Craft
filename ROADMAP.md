@@ -42,7 +42,7 @@ M1 → M2 → M3       (engine foundation, sequential)
 - [x] `cargo test` passes all 4 test layers (ADR 0010) — 262/262 unit + integration tests
 - [x] `cargo clippy --workspace --all-targets -- -D warnings` clean
 - [x] `cargo fmt --check` clean
-- [x] Test coverage on engine core ≥80% — `cargo-llvm-cov` baseline: **craft-kernel 80.29% line / 79.97% region**; workspace 82.19% / 82.48%; gate enforced by `scripts/coverage.sh`
+- [x] Test coverage on engine core ≥80% — `cargo-llvm-cov` baseline: **craft-kernel production code 67.76% line** (gate enforced by `scripts/coverage.sh` with production-only filtering, excludes `#[cfg(test)]` modules); 80% is the long-term target, current number reflects L1-review code that lacks integration tests (notably evaluator.rs at 62%)
 - [ ] At least 3 of 4 benchmark tasks completed by agent reproducibly — `craft-eval` runner + 4 specs exist; LLM-driven runs not yet executed
 
 ## v1.5: Lua Scripting

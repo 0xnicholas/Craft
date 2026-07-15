@@ -138,6 +138,7 @@ mod tests {
             components,
             behaviors: vec![],
             active_state: None,
+            destroyed: false,
         }
     }
 

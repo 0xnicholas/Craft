@@ -19,6 +19,7 @@ pub struct LuaRuntime {
     vm: Lua,
     queries: Rc<RefCell<QueryRegistry>>,
     rng_state: Rc<RefCell<u64>>,
+    run_generation: Rc<RefCell<u64>>,
 }
 
 impl LuaRuntime {
@@ -39,6 +40,7 @@ impl LuaRuntime {
             vm,
             queries: Rc::new(RefCell::new(QueryRegistry::new())),
             rng_state: Rc::new(RefCell::new(seed.wrapping_add(1))),
+            run_generation: Rc::new(RefCell::new(0)),
         })
     }
 
@@ -59,12 +61,25 @@ impl LuaRuntime {
             .scene_mut()
             .ok_or_else(|| LuaError::external("engine has no scene loaded"))?;
 
-        let scene_handle = SceneHandle::wrap(scene);
-        let bus_handle = BusHandle::wrap(&mut engine.bus);
+        let generation = {
+            let mut g = self.run_generation.borrow_mut();
+            *g = g.wrapping_add(1);
+            *g
+        };
+
+        let scene_handle = SceneHandle::wrap(scene, generation);
+        let bus_handle = BusHandle::wrap(&mut engine.bus, generation);
         let queries = Rc::clone(&self.queries);
         let rng_state = Rc::clone(&self.rng_state);
 
-        self.install_engine_api(scene_handle.clone(), bus_handle.clone(), queries, rng_state)?;
+        self.install_engine_api(
+            scene_handle,
+            bus_handle,
+            queries,
+            rng_state,
+            generation,
+            Rc::clone(&self.run_generation),
+        )?;
         let result = self.vm.load(script).exec();
         let _ = self.uninstall_engine_api();
         result
@@ -76,14 +91,32 @@ impl LuaRuntime {
         bus: BusHandle,
         queries: Rc<RefCell<QueryRegistry>>,
         rng_state: Rc<RefCell<u64>>,
+        generation: u64,
+        current_generation: Rc<RefCell<u64>>,
     ) -> LuaResult<()> {
+        // Wipe any leftover engine globals (and NodeRefs bound to a prior run's
+        // generation) before installing fresh ones, so a partial failure
+        // here cannot leave userdata pointing at a stale `&mut Engine` borrow.
+        self.uninstall_engine_api()?;
+
         let engine_table = self.vm.create_table()?;
 
-        engine_table.set("emit", make_emit(&self.vm, bus.clone())?)?;
-        engine_table.set("spawn", make_spawn(&self.vm, scene.clone())?)?;
+        engine_table.set("emit", make_emit(&self.vm, bus.clone(), generation)?)?;
+        engine_table.set(
+            "spawn",
+            make_spawn(
+                &self.vm,
+                scene.clone(),
+                generation,
+                Rc::clone(&current_generation),
+            )?,
+        )?;
         engine_table.set("call_system", make_call_system(&self.vm, queries)?)?;
         engine_table.set("rng", make_rng(&self.vm, rng_state)?)?;
-        engine_table.set("get_node", make_get_node(&self.vm, scene)?)?;
+        engine_table.set(
+            "get_node",
+            make_get_node(&self.vm, scene, generation, Rc::clone(&current_generation))?,
+        )?;
         engine_table.set("log", make_log(&self.vm)?)?;
 
         self.vm.globals().set("engine", engine_table)?;
@@ -99,52 +132,97 @@ impl LuaRuntime {
 #[derive(Clone)]
 pub struct SceneHandle {
     ptr: *mut craft_kernel::Scene,
+    generation: u64,
 }
 
-unsafe impl Send for SceneHandle {}
-unsafe impl Sync for SceneHandle {}
-
+// The raw pointer is only dereferenced through `with_ref`/`with_mut`, and only
+// while a `LuaRuntime::run` call holds the original `&mut Scene` borrow. The
+// `generation` is bumped on every `wrap` so userdata created during a prior
+// `run` (whose `&mut Scene` borrow has since ended) can detect that its
+// pointer is stale and refuse to dereference it. `NodeRef` and the engine
+// globals store this generation alongside the pointer.
 impl SceneHandle {
-    fn wrap(scene: &mut craft_kernel::Scene) -> Self {
+    fn wrap(scene: &mut craft_kernel::Scene, generation: u64) -> Self {
         Self {
             ptr: scene as *mut craft_kernel::Scene,
+            generation,
         }
     }
 
-    pub fn with_ref<R>(&self, f: impl FnOnce(&craft_kernel::Scene) -> R) -> R {
-        unsafe { f(&*self.ptr) }
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
-    pub fn with_mut<R>(&self, f: impl FnOnce(&mut craft_kernel::Scene) -> R) -> R {
-        unsafe { f(&mut *self.ptr) }
+    pub fn with_ref<R>(
+        &self,
+        expected_generation: u64,
+        f: impl FnOnce(&craft_kernel::Scene) -> R,
+    ) -> Result<R, String> {
+        if expected_generation != self.generation {
+            return Err(format!(
+                "scene handle is from a prior run() call (expected generation {expected_generation}, got {})",
+                self.generation
+            ));
+        }
+        Ok(unsafe { f(&*self.ptr) })
+    }
+
+    pub fn with_mut<R>(
+        &self,
+        expected_generation: u64,
+        f: impl FnOnce(&mut craft_kernel::Scene) -> R,
+    ) -> Result<R, String> {
+        if expected_generation != self.generation {
+            return Err(format!(
+                "scene handle is from a prior run() call (expected generation {expected_generation}, got {})",
+                self.generation
+            ));
+        }
+        Ok(unsafe { f(&mut *self.ptr) })
     }
 }
 
 #[derive(Clone)]
 pub struct BusHandle {
     ptr: *mut SignalBus,
+    generation: u64,
 }
 
-unsafe impl Send for BusHandle {}
-unsafe impl Sync for BusHandle {}
-
 impl BusHandle {
-    fn wrap(bus: &mut SignalBus) -> Self {
+    fn wrap(bus: &mut SignalBus, generation: u64) -> Self {
         Self {
             ptr: bus as *mut SignalBus,
+            generation,
         }
     }
 
-    pub fn with_mut<R>(&self, f: impl FnOnce(&mut SignalBus) -> R) -> R {
-        unsafe { f(&mut *self.ptr) }
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub fn with_mut<R>(
+        &self,
+        expected_generation: u64,
+        f: impl FnOnce(&mut SignalBus) -> R,
+    ) -> Result<R, String> {
+        if expected_generation != self.generation {
+            return Err(format!(
+                "bus handle is from a prior run() call (expected generation {expected_generation}, got {})",
+                self.generation
+            ));
+        }
+        Ok(unsafe { f(&mut *self.ptr) })
     }
 }
 
-// SAFETY: Both SceneHandle and BusHandle store raw pointers that are guaranteed
-// to remain valid for the duration of a single LuaRuntime::run call, because
-// the caller (run) creates the handles from a `&mut Engine` and drops them
-// before returning. The raw-pointer indirection lets the RefCell reborrow
-// without imposing an invariant `'static` bound on the inner `&mut T`.
+// SAFETY: Both SceneHandle and BusHandle store raw pointers to engine
+// internals that are only valid while the originating `LuaRuntime::run` call
+// holds the `&mut Engine` borrow. The `generation` field makes that
+// liveness checkable: each `with_ref`/`with_mut` call validates that the
+// caller's expected generation matches the handle's generation, which is
+// bumped on every `run`. Userdata created during a prior run (whose
+// `&mut Engine` borrow has since ended) carry a stale generation and are
+// refused with a LuaError before any dereference.
 
 fn sandbox_vm(vm: &Lua) -> LuaResult<()> {
     let globals = vm.globals();
@@ -171,27 +249,39 @@ fn sandbox_vm(vm: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn make_emit(vm: &Lua, bus: BusHandle) -> LuaResult<LuaFunction> {
+fn make_emit(vm: &Lua, bus: BusHandle, generation: u64) -> LuaResult<LuaFunction> {
     vm.create_function(move |_, (name, payload): (String, LuaValue)| {
-        let payload_json = lua_value_to_json(payload);
-        bus.with_mut(|bus| {
+        let payload_json = lua_value_to_json(payload)?;
+        bus.with_mut(generation, |bus| {
             let id = bus.declare(&name);
             bus.emit(id, payload_json);
-        });
+        })
+        .map_err(LuaError::external)?;
         Ok(())
     })
 }
 
-fn make_spawn(vm: &Lua, scene: SceneHandle) -> LuaResult<LuaFunction> {
+fn make_spawn(
+    vm: &Lua,
+    scene: SceneHandle,
+    generation: u64,
+    current_generation: Rc<RefCell<u64>>,
+) -> LuaResult<LuaFunction> {
     vm.create_function(move |lua, (type_name, components): (String, LuaTable)| {
         let comp_pairs = read_components(&components)?;
-        let id = scene.with_mut(|s| {
-            let id = s.next_spawn_id(&type_name);
-            let node = build_node(&type_name, comp_pairs, id.clone());
-            s.add_node(node);
-            id
-        });
-        let ud = lua.create_userdata(NodeRef::new(id, scene.clone()))?;
+        let id = scene
+            .with_mut(generation, |s| {
+                let id = s.next_spawn_id(&type_name);
+                let node = build_node(&type_name, comp_pairs, id.clone());
+                s.add_node(node);
+                id
+            })
+            .map_err(LuaError::external)?;
+        let ud = lua.create_userdata(NodeRef::new(
+            id,
+            scene.clone(),
+            Rc::clone(&current_generation),
+        ))?;
         Ok(LuaValue::UserData(ud))
     })
 }
@@ -212,19 +302,43 @@ fn make_call_system(vm: &Lua, queries: Rc<RefCell<QueryRegistry>>) -> LuaResult<
 
 fn make_rng(vm: &Lua, state: Rc<RefCell<u64>>) -> LuaResult<LuaFunction> {
     vm.create_function(move |_, (lo, hi): (i64, i64)| {
+        if lo > hi {
+            return Err(LuaError::external(format!(
+                "engine.rng(lo, hi) requires lo <= hi, got lo={lo} hi={hi}"
+            )));
+        }
+        let span = (hi as i128) - (lo as i128) + 1;
+        if span > (u64::MAX as i128) {
+            return Err(LuaError::external(format!(
+                "engine.rng range [{lo}, {hi}] exceeds u64 span; clamp the range or sample in two steps"
+            )));
+        }
         let mut state_ref = state.borrow_mut();
-        *state_ref = state_ref.wrapping_mul(RNG_MUL).wrapping_add(RNG_INC);
-        let range = (hi - lo + 1) as u64;
-        let offset = if range == 0 { 0 } else { *state_ref % range };
+        *state_ref = state_ref
+            .wrapping_mul(RNG_MUL)
+            .wrapping_add(RNG_INC);
+        let range = span as u64;
+        let offset = *state_ref % range;
         Ok(lo + offset as i64)
     })
 }
 
-fn make_get_node(vm: &Lua, scene: SceneHandle) -> LuaResult<LuaFunction> {
+fn make_get_node(
+    vm: &Lua,
+    scene: SceneHandle,
+    generation: u64,
+    current_generation: Rc<RefCell<u64>>,
+) -> LuaResult<LuaFunction> {
     vm.create_function(move |lua, id: String| {
-        let exists = scene.with_ref(|s| s.find_node(&id).is_some());
+        let exists = scene
+            .with_ref(generation, |s| s.find_node(&id).is_some())
+            .map_err(LuaError::external)?;
         if exists {
-            let ud = lua.create_userdata(NodeRef::new(id, scene.clone()))?;
+            let ud = lua.create_userdata(NodeRef::new(
+                id,
+                scene.clone(),
+                Rc::clone(&current_generation),
+            ))?;
             Ok(LuaValue::UserData(ud))
         } else {
             Ok(LuaValue::Nil)
@@ -259,6 +373,15 @@ pub fn lua_to_component_value(value: LuaValue) -> LuaResult<ComponentValue> {
         LuaValue::Table(t) => {
             let len = t.len()?;
             if len == 2 {
+                for pair in t.pairs::<LuaValue, LuaValue>() {
+                    let (k, _) = pair?;
+                    if !matches!(k, LuaValue::Integer(_)) {
+                        return Err(LuaError::external(format!(
+                            "vec2 component values must be pure [x, y] arrays; found non-integer key {}",
+                            value_type_name(&k)
+                        )));
+                    }
+                }
                 let x: f64 = t.get(1)?;
                 let y: f64 = t.get(2)?;
                 Ok(ComponentValue::Vec2([x, y]))
@@ -291,24 +414,8 @@ pub fn component_value_to_lua(lua: &Lua, value: &ComponentValue) -> LuaResult<Lu
     }
 }
 
-fn lua_value_to_json(value: LuaValue) -> Value {
-    match value {
-        LuaValue::Nil => Value::Null,
-        LuaValue::Boolean(b) => Value::Bool(b),
-        LuaValue::Integer(i) => Value::Number(i.into()),
-        LuaValue::Number(n) => serde_json::Number::from_f64(n)
-            .map(Value::Number)
-            .unwrap_or(Value::Null),
-        LuaValue::String(s) => match s.to_str() {
-            Ok(s) => Value::String(s.to_string()),
-            Err(_) => Value::Null,
-        },
-        LuaValue::Table(t) => match lua_table_to_json(t, 0) {
-            Ok(v) => v,
-            Err(_) => Value::Null,
-        },
-        _ => Value::Null,
-    }
+fn lua_value_to_json(value: LuaValue) -> LuaResult<Value> {
+    lua_value_to_json_safe(value, 0)
 }
 
 fn lua_table_to_json(t: LuaTable, depth: u32) -> LuaResult<Value> {

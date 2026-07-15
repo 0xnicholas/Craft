@@ -510,6 +510,7 @@ mod tests {
             ]),
             behaviors,
             active_state: None,
+            destroyed: false,
         }
     }
 

@@ -760,6 +760,7 @@ pub fn apply_commands_with_animations(
                     components: comps,
                     behaviors,
                     active_state: None,
+                    destroyed: false,
                 });
             }
             ActionCommand::Emit { signal, args } => {
@@ -988,6 +989,7 @@ mod tests {
             components,
             behaviors: vec![],
             active_state: None,
+            destroyed: false,
         }
     }
 
