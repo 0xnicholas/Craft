@@ -1,5 +1,6 @@
 pub mod app;
 pub mod error;
+pub mod io;
 pub mod state;
 
 pub fn run(_args: Vec<String>) -> eframe::Result<()> {
