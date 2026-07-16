@@ -1,0 +1,33 @@
+[package]
+name = "craft-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "craft_editor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "craft-editor"
+path = "src/main.rs"
+
+[dependencies]
+craft-kernel = { path = "../craft-kernel" }
+craft-schema = { path = "../craft-schema" }
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui_dock = "0.14"
+rfd = "0.15"
+notify = "7"
+serde = { workspace = true }
+serde_json = { workspace = true }
+directories = "5"
+tracing = "0.1"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+egui_kittest = "0.31"
+egui-winit = { version = "0.31", features = ["accesskit"] }
+tempfile = "3"
