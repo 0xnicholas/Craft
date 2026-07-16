@@ -311,7 +311,7 @@ impl EditorEngine {
     pub fn pause(&mut self);
     pub fn resume(&mut self);
     pub fn step(&mut self) -> EngineResult<()>;
-    pub fn reload(&mut self) -> EngineResult<SceneDiff>;
+    pub fn reload(&mut self) -> EngineResult<HotReloadResult>;
     pub fn tick_if_due(&mut self) -> bool;
     pub fn grid(&self) -> &TerminalGrid;
 }
@@ -319,36 +319,59 @@ impl EditorEngine {
 
 ### EditorRenderer (implements `craft_kernel::Render`)
 
+The actual `Render` trait (ADR 0004, `crates/craft-kernel/src/render.rs:76`) is 4 methods:
+
 ```rust
-pub struct EditorRenderer {
-    grid: TerminalGrid,
-    cols: u16,
-    rows: u16,
-}
-
-pub struct Cell {
-    pub ch: char,
-    pub fg: [u8; 3],
-    pub bg: [u8; 3],
-}
-
-pub struct TerminalGrid {
-    pub cells: Vec<Cell>,
-    pub cols: u16,
-    pub rows: u16,
-}
-
-impl craft_kernel::Render for EditorRenderer {
-    fn begin_frame(&mut self, cols: u16, rows: u16) { ... }
-    fn put_cell(&mut self, col: u16, row: u16, ch: char, fg: [u8; 3], bg: [u8; 3]) { ... }
-    fn end_frame(&mut self) { ... }
-    fn present(&mut self) { }                        // no-op
+pub trait Render: Send {
+    fn render(&mut self, components: &[ComponentView], tick: u64);
+    fn viewport(&self) -> Viewport;
+    fn resize(&mut self, viewport: Viewport);
+    fn shutdown(&mut self);
+    fn capabilities(&self) -> RenderCapabilities { ... }   // default
 }
 ```
 
-Mirrors `craft-terminal` ANSI-emit logic but writes to in-memory grid. Avoids ANSI round-trip.
+There is no cell-level API at the trait level — the trait operates on `ComponentView` snapshots of the scene. `EditorRenderer` therefore adapts by mirroring `craft-terminal::AnsiRenderer`'s projection logic and recording the result as a `TerminalGrid`:
 
-**Code-sharing**: copy emit logic into `craft-editor` for E1 (<100 lines). De-duplication refactor (extract `craft_terminal_core`) deferred.
+```rust
+pub struct EditorRenderer {
+    viewport: Viewport,
+    last_grid: TerminalGrid,                // rows × cols of MonochromeCell
+    frame_counter: u64,
+}
+
+pub struct MonochromeCell {
+    pub ch: char,
+}
+
+pub struct TerminalGrid {
+    pub cells: Vec<MonochromeCell>,        // row-major; size = viewport.width * height
+    pub width: u16,
+    pub height: u16,
+}
+
+impl craft_kernel::Render for EditorRenderer {
+    fn render(&mut self, components: &[ComponentView], tick: u64) {
+        self.frame_counter += 1;
+        // Same projection logic as AnsiRenderer::render:
+        //   - clear buffer
+        //   - draw top/bottom borders
+        //   - draw each ComponentView projected to grid coordinates via glyph_for_type
+        //   - record the resulting chars into self.last_grid.cells
+        todo!("E1 implementation — mirror AnsiRenderer::render")
+    }
+    fn viewport(&self) -> Viewport { self.viewport }
+    fn resize(&mut self, viewport: Viewport) {
+        self.viewport = viewport;
+        self.last_grid = TerminalGrid::blank(viewport.width, viewport.height);
+    }
+    fn shutdown(&mut self) { }
+}
+```
+
+**Monochrome for E1**: the trait carries no colors. The Terminal Preview panel renders glyphs with a single foreground color. Color support (fg/bg) is deferred until a later trait revision adds it.
+
+**Code-sharing**: copy `glyph_for_type`, `project_to_screen`, and `write_at` helpers from `craft-terminal` into a private `editor_render_helpers` module in E1. Extract `craft_terminal_core` in a later refactor.
 
 ### Tick loop
 
@@ -367,13 +390,20 @@ External edit → notify watcher fires → status bar prompt      │
               user clicks [Reload] ──────────┴──► re-parse file into SceneDef
                                                                 │
                                                                 ▼
-                                                        engine.reload() → SceneDiff
+                                          engine.apply_hot_reload(&def)
                                                                 │
                                                                 ▼
-                                                        status bar shows summary
+                                                  returns HotReloadResult {
+                                                    diff: SceneDiff,
+                                                    affected_node_ids,
+                                                    applied: bool,
+                                                  }
+                                                                │
+                                                                ▼
+                                                status bar shows summary
 ```
 
-`engine.reload()` is `craft-kernel`'s existing entry point (ADR 0009). Result treated as black box.
+`engine.apply_hot_reload(&Scene)` is the kernel's existing entry point (ADR 0009, `crates/craft-kernel/src/engine.rs:273`). The editor wraps it in `EditorEngine::reload()`, formats the `HotReloadResult` for the status bar (e.g., `applied=true, 3 affected`), and applies any side-effects (e.g., bookkeeping on the in-memory `SceneDef`).
 
 ### File watcher
 
@@ -398,8 +428,8 @@ Recursive watch on `state.project.root`. 100ms debounce. Ignores writes performe
 
 `EditorEngine::load_scene(path)`:
 1. Read file content
-2. Parse via `craft-kernel::Scene::from_json`
-3. Call `engine.start(path)`
+2. Parse via `craft_kernel::scene::Scene::parse(content, path_str, &registry)` — engine exposes `node_registry()` (read-only) and `node_registry_mut()` for the registry
+3. Call `engine.load_scene(parsed)` (the kernel's `Engine::load_scene` API; takes a `Scene` value)
 4. Set `scene_path`, `is_running = true`
 
 ---
@@ -538,9 +568,9 @@ E1 test suite target: <30s total:
 
 ### Engine integration
 
-- [ ] Editor loads `games/tower_defense/scene.json` via `craft-kernel::Scene::from_json`
-- [ ] `engine.tick()` runs; tower_defense renders the same first frame as standalone `craft-terminal`
-- [ ] `engine.reload()` after edit returns `SceneDiff`; status bar shows summary
+- [ ] Editor loads `games/tower_defense/scene.json` via `craft_kernel::scene::Scene::parse(content, path, registry)` then `engine.load_scene(parsed)`
+- [ ] `engine.tick()` runs; tower_defense renders the same first frame as standalone `craft-terminal` (EditorRenderer mirrors AnsiRenderer projection)
+- [ ] `engine.apply_hot_reload(&def)` after edit returns `HotReloadResult`; status bar shows `applied=true, N affected nodes` summary
 
 ### Quality gates
 
