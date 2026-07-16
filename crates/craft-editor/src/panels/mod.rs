@@ -25,11 +25,19 @@ pub trait Panel {
 
 pub mod agent_panel;
 pub mod behavior_editor;
+pub mod file_browser;
+pub mod inspector;
 pub mod lua_editor;
+pub mod scene_tree;
+pub mod terminal_preview;
 
 pub use agent_panel::AgentPanel;
 pub use behavior_editor::BehaviorEditorPanel;
+pub use file_browser::FileBrowserPanel;
+pub use inspector::InspectorPanel;
 pub use lua_editor::LuaEditorPanel;
+pub use scene_tree::SceneTreePanel;
+pub use terminal_preview::TerminalPreviewPanel;
 
 pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
     for action in actions {
