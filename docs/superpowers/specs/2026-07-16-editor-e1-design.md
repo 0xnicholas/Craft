@@ -42,6 +42,7 @@ These supplement (do not replace) ADRs 0017–0019:
 crates/craft-editor/
 ├── Cargo.toml
 ├── src/
+│   ├── lib.rs                     # Re-exports app modules so integration tests can access internals
 │   ├── main.rs                   # eframe entry; parse CLI args; build EditorApp
 │   ├── app.rs                    # EditorApp: eframe::App impl — per-frame orchestration
 │   ├── state.rs                  # EditorState (single source of truth across frames)
@@ -106,6 +107,12 @@ Workspace `Cargo.toml` gains `crates/craft-editor` under `members`.
 
 `craft-kernel` and `craft-lua` MUST NOT depend on `craft-editor`. Editor is a leaf consumer; engine stays GUI-free for headless CI.
 
+### Library + binary targets
+
+`craft-editor` ships both:
+- `src/lib.rs` exposes all internal modules so integration tests under `tests/` can drive panels and `EditorState` directly (no need to expose internals through `main.rs` only).
+- `src/main.rs` is a thin binary that calls `craft_editor::run(args)`.
+
 ### Platform
 
 - Primary: macOS (dev environment)
@@ -126,7 +133,7 @@ pub struct EditorState {
     pub panels: PanelsState,
     pub dock: DockState<EditorTab>,
     pub ui: UiState,
-    pub lsp: LspManager,                    // empty in E1 (populated in E2)
+    pub lsp: LspManager,                    // zero-sized placeholder in E1; populated in E2
     pub pending_actions: Vec<PanelAction>,
     pub errors: Vec<EditorError>,
 }
@@ -373,7 +380,7 @@ External edit → notify watcher fires → status bar prompt      │
 ```rust
 pub struct Watcher {
     _inner: notify::RecommendedWatcher,
-    receiver: crossbeam_channel::Receiver<WatcherEvent>,
+    receiver: std::sync::mpsc::Receiver<WatcherEvent>,
     debounce: Duration,                              // 100ms
 }
 
@@ -382,6 +389,8 @@ pub enum WatcherEvent {
     Removed(PathBuf),
 }
 ```
+
+Watcher uses `std::sync::mpsc` (no extra dependency).
 
 Recursive watch on `state.project.root`. 100ms debounce. Ignores writes performed by editor itself.
 
