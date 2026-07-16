@@ -66,7 +66,7 @@ These supplement (do not replace) ADRs 0017, 0018, 0019.
 crates/craft-editor/src/
 ├── json_path.rs             # NEW — JSONPath parser + schema lookup engine
 ├── lua_lsp.rs               # NEW — LuaLS subprocess client (JSON-RPC framed stdio)
-├── lua_stub_gen.rs          # NEW — craft-schema → LuaCATS-annotated Lua stub
+├── lua_stub_gen.rs          # NEW — writes craft_schema::lua_engine_stub() to .craft/engine_types.lua
 ├── lsp/
 │   └── mod.rs               # NEW — generic LSP framing + types
 ├── panels/
@@ -75,11 +75,16 @@ crates/craft-editor/src/
 │   └── behavior_editor.rs   # MOD — replaces stub (loads standalone .behavior.json)
 └── state.rs                 # MOD — LuaEditorState + BehaviorEditState + inspector.behavior_edits
 
+crates/craft-schema/src/
+└── lua_engine_stub.lua      # NEW — checked-in LuaCATS-annotated stub asset; loaded via include_str!
+
 crates/craft-editor/tests/
 ├── e2_json_path.rs          # NEW — unit tests for JsonPathLsp
 ├── e2_lua_stub_gen.rs       # NEW — unit tests for stub generation
 ├── e2_inspector_behavior.rs # NEW — integration: schema flags invalid behavior edits
-└── e2_lua_editor.rs         # NEW — integration: LuaLS subprocess lifecycle + skip-if-missing
+├── e2_lua_editor.rs         # NEW — integration: LuaLS subprocess lifecycle + skip-if-missing
+└── e2_panels_kittest.rs     # NEW — render smoke tests for behavior + lua panels (no PNG snapshots;
+                              #      same approach as E1's e1_panels_kittest.rs)
 ```
 
 ### `Cargo.toml` dependencies
@@ -88,15 +93,14 @@ Add to `[dependencies]` in `crates/craft-editor/Cargo.toml`:
 
 ```toml
 which = "7"            # locate lua-language-server
-uuid = { workspace = true, features = ["v4"] }  # LSP request IDs
 ```
 
-`which = "7"` is workspace-addable. `uuid` already in workspace at the right version.
+`which = "7"` is workspace-addable. No new direct dependency on `uuid` —
+LSP request IDs use `std::sync::atomic::AtomicI64` for sequencing.
 
 Add to `[dev-dependencies]`:
 
 ```toml
-assert_cmd = "2"       # integration: run lua-language-server if available
 temp_env = "0.3"       # already present (E1)
 ```
 
@@ -278,6 +282,12 @@ emerge as red underlines beneath the offending span.
 shows `valid · {kind} = {name}` in the footer.
 
 ### 3.2 Apply model (separate from edit)
+
+**Note on ADR divergence:** ADR 0018's Behavior Editor description shows only
+`Ctrl+S → SaveFile` (one-step save). E2 introduces a two-step Edit → Apply
+model so authors can stage partial edits without immediately mutating the
+scene def. This is additive — ADR 0018's `Ctrl+S` behavior still works at the
+file level once Apply has been performed.
 
 Two distinct operations:
 
@@ -477,9 +487,9 @@ local SignalBus = {}
 return {}
 ```
 
-Regenerated only when the embedded `craft_schema::SCHEMA_VERSION` differs from
-the comment header in the existing file. Manual `Regenerate stubs` button in
-the panel header for force-rerun.
+Regenerated only when the existing `craft_schema::SCHEMA_VERSION` differs from
+the comment header in the on-disk `.craft/engine_types.lua`. Manual
+`Regenerate stubs` button in the panel header for force-rerun.
 
 The exact set of fields/methods exposed comes from a new function in
 `craft-schema`:
@@ -490,13 +500,18 @@ pub fn lua_engine_stub() -> String {
     // hardcoded for E2; will move to schemars-driven generation in v3
     include_str!("lua_engine_stub.lua").to_string()
 }
-
-pub const SCHEMA_VERSION: &str = "0.2.0";
 ```
 
-The body of `lua_engine_stub.lua` is checked in (not auto-generated in E2 to
-avoid recursion: craft-schema would need to depend on schemars-driven code
-generation that crosses crates, which we defer).
+The asset file `crates/craft-schema/src/lua_engine_stub.lua` is checked in to
+the `craft-schema` crate (not the editor). `craft-editor` calls
+`craft_schema::lua_engine_stub()` to obtain the stub body and writes it to
+`<workspace_root>/.craft/engine_types.lua`. This avoids any editor→schema
+recursion and keeps the asset with the schema it describes.
+
+**Note:** `craft_schema::SCHEMA_VERSION` already exists (currently `"1.0"`).
+E2 reuses it as the only schema-version constant — no new constant is added.
+The stub generator compares the constant against the header comment in the
+existing on-disk stub to decide whether to regenerate.
 
 ### 4.7 Hot reload on save
 
@@ -523,10 +538,18 @@ pub fn save_buffer(&mut self, state: &mut EditorState) -> Result<(), LuaSaveErro
 - Replace `/` with `.`
 - Lower-case nothing (Lua is case-sensitive)
 
-`state.engine.lua_runtime_mut()` is a new accessor on `EditorEngine` that
-exposes the underlying `craft_lua::LuaRuntime` if the kernel has been wired
-with one. **This requires `craft-kernel` to grow a `lua_runtime: Option<LuaRuntime>`
-field** — see §7.
+`state.engine.lua_runtime_mut()` is a new accessor on `EditorEngine` (see
+§7.1) that exposes the underlying `craft_lua::LuaRuntime`. Every editor
+session has one — the editor constructs it unconditionally in
+`EditorEngine::new()`. Whether a given project actually uses Lua is a
+file-system concern (presence of `scripts/` or `craft.toml`'s `[lua]`
+section), not a runtime availability concern.
+
+When a project is loaded, `EditorEngine::load_scene_file()` reads
+`craft.toml` and, if a `[lua] modules_dir = "scripts"` (or similar) entry
+exists, calls `lua_runtime.set_modules_dir(path)`. If not, the Lua runtime
+is left in its inert default state — `reload_class` calls still succeed
+(they just reload a class that nothing is using).
 
 ## 5. State persistence
 
@@ -614,42 +637,53 @@ E2 additions target ≤ +10s to the E1 suite:
 - File-watcher conflict UX (covered by E1's analogous test)
 - Real `.lua` roundtrip against `craft-lua` (covered in craft-lua's own tests)
 
-## 7. `craft-kernel` API additions
+## 7. API additions
 
-E2 requires the following additions to `craft-kernel`. None change existing
-public API; all are additive.
+E2 requires the following additive API changes. None modify existing public
+API; all are net-new.
 
-### 7.1 `EditorEngine::lua_runtime_mut()`
+### 7.1 `craft-editor` additions (EditorEngine gains a Lua runtime)
 
-Already added via `EditorEngine` wrapper in E1; needs accessor:
+`EditorEngine` (already defined in E1 at `crates/craft-editor/src/engine.rs:12`)
+gains a new field and accessor:
 
 ```rust
 // crates/craft-editor/src/engine.rs (additions to EditorEngine)
+pub struct EditorEngine {
+    // ... existing E1 fields ...
+    pub lua_runtime: Option<craft_lua::LuaRuntime>,  // NEW
+}
+
 impl EditorEngine {
     pub fn lua_runtime_mut(&mut self) -> Option<&mut craft_lua::LuaRuntime> {
-        // requires EditorEngine to hold an `Option<craft_lua::LuaRuntime>`
+        self.lua_runtime.as_mut()
+    }
+
+    pub fn lua_runtime(&self) -> Option<&craft_lua::LuaRuntime> {
+        self.lua_runtime.as_ref()
     }
 }
 ```
 
-To support this, `EditorEngine` needs a new field `lua_runtime: Option<craft_lua::LuaRuntime>`.
-Construction in `EditorEngine::new()` initializes it to `None`. The
-`EditorEngine::load_scene_file()` path **does not** automatically initialize
-the Lua runtime — wiring Lua into a project happens explicitly via a new
-panel action `PanelAction::SetLuaRuntime` (set by File Browser → "Use Lua"
-on a `craft.toml` whose `[lua] modules_dir = "scripts"` exists). This keeps
-the kernel/engine agnostic of Lua until the project opts in.
+Construction in `EditorEngine::new()` initializes `lua_runtime` to
+`Some(craft_lua::LuaRuntime::new())` unconditionally — every editor session
+has a Lua runtime available. Whether a given project uses Lua or not is a
+file-system concern (`scripts/` exists or not), not a runtime availability
+concern. The runtime itself is inert until `set_modules_dir` is called by the
+editor when a project is loaded (see §4.7).
 
-### 7.2 `craft-kernel::Scene::schema_version() -> &'static str`
+This is **not** a `craft-kernel` change: the editor wraps `craft_kernel::Engine`
+and adds `craft_lua::LuaRuntime` as an orthogonal sibling. The kernel stays
+Lua-free.
 
-Returns a string constant the editor can stamp into the
-`$schema` field of newly authored behavior files. Implementation:
+### 7.2 Schema version constant
 
-```rust
-pub const SCENE_SCHEMA_VERSION: &str = "0.2.0";
-
-pub fn schema_version(&self) -> &'static str { SCENE_SCHEMA_VERSION }
-```
+No new constant. E2 reuses `craft_schema::SCHEMA_VERSION` (already exported
+at `crates/craft-schema/src/lib.rs:22`, currently `"1.0"`) as the single
+schema-version source of truth. The Lua stub generator stamps this into the
+header comment of `.craft/engine_types.lua`; the standalone behavior file
+writer may stamp it into the `$schema` field of newly authored files (best
+effort — not enforced by validation in E2).
 
 ## 8. File watcher integration
 
