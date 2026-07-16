@@ -20,16 +20,19 @@ Behavioral guidelines and project context for AI agents working on Craft.
 - **No `unwrap()` or `expect()` in production code.** Use `EngineResult<T>` with structured errors (ADR 0008). Every error must carry `file`, `json_path`, and `suggestion`.
 - **`cargo clippy -- -D warnings` must pass.** No warnings allowed in CI.
 - **`cargo fmt` must pass.**
+- **Unsafe is allowed** but must: (1) be justified by a comment block beginning with `// SAFETY:`, (2) have a clearly narrower-than-the-whole-program scope, (3) ideally be wrapped in a small struct with safe methods (`SceneHandle.with_ref`, `BusHandle.with_mut`).
 
 ### TypeScript (SDK)
 - Types are **auto-generated** from `craft-schema`. Never hand-write types that duplicate schema definitions.
 - SDK wraps sync NAPI calls in `Promise.resolve()`. No real async — engine is single-threaded (ADR 0007).
 
 ### Lua (game scripts)
-- Lua 5.5. Scripts live in `games/<name>/scripts/`.
-- Engine API uses field syntax (`node.position`, not `node:get("position")`). See ADR 0016.
-- **No `math.random()`** — use `engine.rng()` for deterministic behavior.
+- **Lua 5.4** via mlua 0.12 (ADR 0016 originally specced 5.5; downgraded for packaging availability).
+- Scripts live in `games/<name>/scripts/`.
+- Engine API uses field syntax (`node.position`, not `node:get("position")`).
+- **No `math.random()` by default** — use `engine.rng()`. With `set_determinism(Replay)`, `math.random` is replaced by `engine.rng`.
 - **No `io.*`, `os.*`** — Lua VM is sandboxed.
+- **Reload-safe class definitions** must use the `Foo = Foo or {}` idiom (or module pattern `local M = {}; return M`). Direct `Foo = {}` replaces the metatable that existing instances hold and breaks hot-reload (ADR 0016 §"Self preservation").
 
 ## Architecture Constraints (Non-Negotiable)
 

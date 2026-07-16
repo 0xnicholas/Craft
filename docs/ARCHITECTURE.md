@@ -1,7 +1,7 @@
 # Craft Architecture
 
-**Status**: Draft
-**Date**: 2026-07-13
+**Status**: v0.1.0 — v1 + v1.5 implementation shipped. Lua scripting and determinism enforced.
+**Date**: 2026-07-13 (initial); 2026-07-16 (v0.1.0 cut)
 **Reference**: Godot 4.x source (_references/godot-master/)
 
 ## Overview
@@ -44,7 +44,7 @@ Three subsystems, built in dependency order:
 └──────────────┬───────────────────────────────────────────┘
                │
 ┌──────────────▼───────────────────────────────────────────┐
-│  craft-lua (Lua 5.5 via mlua)                             │
+│  craft-lua (Lua 5.4 via mlua)                             │
 │  Two-tier behavior runtime: Lua scripts + JSON behaviors  │
 └──────────────────────────────────────────────────────────┘
                │
@@ -153,7 +153,7 @@ All engine errors are JSON with `file`, `json_path`, `expected_type`, `actual_va
 | `servers/rendering/` — RenderingServer (100+ methods) | `Render` trait (4 methods) | ~180K → ~0.3K |
 | `drivers/` — Vulkan, Metal, D3D12, GLES3 | `craft-terminal/` — ANSI only | ~87K → ~0.5K |
 | `editor/` — Godot Editor IDE | `craft-editor/` — egui desktop app (v2) | ~333K → ~15K |
-| `modules/gdscript/` — custom scripting language | `craft-lua/` — Lua 5.5 via mlua | ~30K → ~5K |
+| `modules/gdscript/` — custom scripting language | `craft-lua/` — Lua 5.4 via mlua | ~30K → ~5K |
 | `modules/mono/` — C# embedding | None | ~25K → 0 |
 | `platform/` — Windows, macOS, Linux, Android, iOS, Web | Node.js (NAPI host) | ~93K → 0 |
 | `servers/physics*/`, `audio/`, `navigation*/`, `xr/` | v1 excluded (non-goals) | ~60K → 0 |
@@ -177,7 +177,7 @@ All engine errors are JSON with `file`, `json_path`, `expected_type`, `actual_va
 | 0009 | Hot Reload | File watcher → diff → hot-patch; stale resource semantics |
 | 0010 | Testing | Four-layer pyramid: unit, replay regression, agent benchmarks, integration |
 | 0015 | Performance Budgets | 8 committed targets: ≤8ms tick, ≤100ms hot reload, ≤5s replay |
-| 0016 | Lua Scripting | Lua 5.5 via mlua; first-class scripting; GDScript parity |
+| 0016 | Lua Scripting | Lua 5.4 via mlua; first-class scripting; GDScript parity |
 | 0017 | Editor Architecture | egui + eframe embedded; file-based editing; PRD v2 deviation |
 | 0018 | Editor Panels & UX | Scene Tree, Inspector, Behavior Editor, Terminal, File Browser, **Lua Script Editor** (LuaLS LSP + engine type stubs), **UX spec** (visual language, shortcuts, drag-drop, 5 workflows) |
 | 0019 | Agent Copilot | Sidebar panel; context injection; diff review flow |
