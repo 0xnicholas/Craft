@@ -1,7 +1,10 @@
 pub mod app;
+pub mod engine;
 pub mod error;
 pub mod io;
 pub mod panels;
+pub mod render_helpers;
+pub mod renderer;
 pub mod state;
 pub mod watcher;
 
