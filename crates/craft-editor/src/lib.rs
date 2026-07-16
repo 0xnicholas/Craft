@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 pub mod app;
 pub mod engine;
-pub mod json_path;
 pub mod error;
 pub mod io;
+pub mod json_path;
 pub mod lsp;
 pub mod menu;
 pub mod panels;
