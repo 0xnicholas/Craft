@@ -17,6 +17,8 @@ pub struct EditorEngine {
     pub is_paused: bool,
     last_tick: Instant,
     tick_rate_hz: u32,
+    pub lua_runtime: Option<craft_lua::LuaRuntime>,
+    pub lua_init_error: Option<String>,
 }
 
 impl EditorEngine {
@@ -24,6 +26,10 @@ impl EditorEngine {
         let mut engine = Engine::new();
         let renderer = EditorRenderer::new();
         engine.enable_rendering(true);
+        let (lua_runtime, lua_init_error) = match craft_lua::LuaRuntime::new(0) {
+            Ok(rt) => (Some(rt), None),
+            Err(e) => (None, Some(e.to_string())),
+        };
         Self {
             engine,
             renderer,
@@ -32,6 +38,8 @@ impl EditorEngine {
             is_paused: false,
             last_tick: Instant::now(),
             tick_rate_hz: 60,
+            lua_runtime,
+            lua_init_error,
         }
     }
 
@@ -102,6 +110,18 @@ impl EditorEngine {
 
     pub fn scene_path(&self) -> Option<&Path> {
         self.scene_path.as_deref()
+    }
+
+    pub fn lua_runtime_mut(&mut self) -> Option<&mut craft_lua::LuaRuntime> {
+        self.lua_runtime.as_mut()
+    }
+
+    pub fn lua_runtime(&self) -> Option<&craft_lua::LuaRuntime> {
+        self.lua_runtime.as_ref()
+    }
+
+    pub fn lua_runtime_error(&self) -> Option<&str> {
+        self.lua_init_error.as_deref()
     }
 }
 
