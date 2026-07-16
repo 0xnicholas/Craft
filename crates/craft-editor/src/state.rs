@@ -67,8 +67,14 @@ impl EditorState {
             .map_err(|e| EditorError::Other {
                 message: e.to_string(),
             })?;
-        let registry = craft_kernel::NodeRegistry::new();
-        let def = crate::io::load_scene(path, &registry)?;
+        let def = self
+            .engine
+            .engine
+            .scene()
+            .cloned()
+            .ok_or_else(|| EditorError::Other {
+                message: "engine has no scene after load".into(),
+            })?;
         let last_saved_hash = craft_kernel::hash_scene_state(&def);
         self.scene = Some(SceneState {
             path: path.to_path_buf(),
