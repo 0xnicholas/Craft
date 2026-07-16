@@ -65,12 +65,12 @@ Can ship alongside v1 or as a fast-follow. Lua is a separate crate (`craft-lua`)
 
 Desktop editor built with egui/eframe, embedded engine. Separate crate (`craft-editor`).
 
-| # | Deliverable | Crate(s) | ADR(s) | Acceptance |
-|---|------------|----------|--------|------------|
-| **E1** | Editor shell + panels | `craft-editor` | 0017, 0018 | egui app launches; embedded engine instance; Scene Tree, Inspector, File Browser, Terminal Preview panels functional; `egui_dock` layout; F5/F8 run/stop |
-| **E2** | Behavior + Lua editors | `craft-editor` | 0018 (Appx A, B) | JSON editor with schema auto-complete + inline validation; Lua editor with LuaLS LSP subprocess + engine type stubs; syntax highlighting |
-| **E3** | Agent Copilot | `craft-editor` | 0019 | Sidebar chat panel; context injection; diff review flow (preview/accept/modify/reject); agent tools map to engine API |
-| **E4** | UX polish | `craft-editor` | 0018 (Appx B) | Keyboard shortcuts (Godot-aligned); drag-drop (reparent, file→node); context menus; undo/redo (100-level per-SceneDef); visual design language |
+| # | Deliverable | Crate(s) | ADR(s) | Status | Tests | Acceptance |
+|---|------------|----------|--------|--------|-------|------------|
+| **E1** | Editor shell + panels | `craft-editor` | 0017, 0018 | ✅ done | `tests/e1_*.rs` (25) | egui app launches; embedded engine instance; Scene Tree, Inspector, File Browser, Terminal Preview panels functional; `egui_dock` layout; F5/F8 run/stop |
+| **E2** | Behavior + Lua editors | `craft-editor` | 0018 (Appx A, B) | planned | — | JSON editor with schema auto-complete + inline validation; Lua editor with LuaLS LSP subprocess + engine type stubs; syntax highlighting |
+| **E3** | Agent Copilot | `craft-editor` | 0019 | planned | — | Sidebar chat panel; context injection; diff review flow (preview/accept/modify/reject); agent tools map to engine API |
+| **E4** | UX polish | `craft-editor` | 0018 (Appx B) | planned | — | Keyboard shortcuts (Godot-aligned); drag-drop (reparent, file→node); context menus; undo/redo (100-level per-SceneDef); visual design language |
 
 ## Beyond v2
 

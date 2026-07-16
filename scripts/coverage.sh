@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Coverage gate for v1 exit criterion (ROADMAP.md §"v1 Exit Criteria").
-# Measures craft-kernel (engine core) line coverage on PRODUCTION code only —
+# Measures craft-kernel and craft-editor line coverage on PRODUCTION code only —
 # inline `#[cfg(test)]` modules are excluded so that adding more tests doesn't
 # artificially lower the gate.
 #
@@ -30,6 +30,7 @@ lcov_path="target/llvm-cov/coverage.lcov"
 mkdir -p "$(dirname "${lcov_path}")"
 
 cargo llvm-cov --package craft-kernel \
+    -p craft-editor \
     --lcov \
     --output-path "${lcov_path}" >/dev/null
 
@@ -164,7 +165,7 @@ if [[ -z "${line_cover}" ]]; then
     exit 2
 fi
 
-echo "craft-kernel production line coverage: ${line_cover}% (${covered}/${total} lines)"
+echo "craft-kernel,craft-editor production line coverage: ${line_cover}% (${covered}/${total} lines)"
 echo "threshold: ${threshold}%"
 
 if (( covered < threshold )); then
@@ -175,6 +176,6 @@ fi
 echo "PASS"
 
 if [[ "${format}" == "html" ]]; then
-    cargo llvm-cov --package craft-kernel --html
+    cargo llvm-cov --package craft-kernel -p craft-editor --html
     echo "HTML report: target/llvm-cov/html/index.html"
 fi
