@@ -267,12 +267,18 @@ pub struct InspectorState {
 **Per-keystroke behavior:**
 
 1. Append character to `buffer`.
-2. Mark `dirty = true`. Emit `PanelAction::SetStatus("behavior modified")`.
-3. Schedule debounced validation (250 ms via `EditorState.last_validation_ms`
-   + `InspectorPanel` checking elapsed). On fire:
+2. Mark `dirty = true`.
+3. Schedule debounced validation (250 ms via `InspectorState.last_validation_ms: u64`
+   which the panel checks against elapsed wall-clock time). On fire:
    - Call `json_path.validate(&buffer)` → update `errors`.
    - Try `serde_json::from_str::<Behavior>` → update `parsed`. On success the
-     in-memory `SceneDef` is NOT mutated here (that's `Apply` only, see §3.3).
+     in-memory `SceneDef` is NOT mutated here (that's `Apply` only, see §3.2).
+
+`InspectorState.last_validation_ms: u64` is a new field added in this
+section (it lives on `InspectorState` because the debounce is per-panel,
+not global). The keystroke handler does NOT emit `PanelAction::SetStatus` on
+every character — that would spam the status bar. Status messages are
+emitted only on Apply success / failure.
 
 **Ctrl+Space** opens `CompletionPopup` at cursor. Arrow keys + Enter inserts.
 
@@ -294,16 +300,36 @@ file level once Apply has been performed.
 Two distinct operations:
 
 - **Edit (always on):** updates `buffer` + `errors`. Mutates NO scene state.
-- **Apply (Ctrl+Enter or `Apply` button):**
+- **Apply (`Apply` button or Ctrl+Enter — note Ctrl+S is reserved for SaveScene
+  to stay consistent with the E1 keyboard map; see "Ctrl+S semantics" below):**
   1. If `parsed.is_some()` AND `errors` is empty (or only warnings):
      - Mutate `scene.def.nodes[node_id].behaviors[behavior_idx]` in place.
-     - Update `SceneState.last_saved_hash` (forces dirty flag flip).
+     - `SceneState.is_dirty()` will now return `true` because the hash of the
+       mutated `scene.def` no longer matches `last_saved_hash`. The hash is
+       intentionally NOT updated here — `last_saved_hash` is updated only by
+       `SaveScene` (`EditorState::save_dirty()` writes the file and refreshes
+       the hash in one step, matching E1's existing semantics).
+     - Emit `PanelAction::SetStatus("applied behavior {node_id}#{behavior_idx}")`.
   2. If `parsed.is_none()` or errors contains an Error:
      - Emit `PanelAction::SetStatus("cannot apply: {N} errors")`.
 
 The `Apply` button only appears when `errors` are empty (disabled otherwise).
 This keeps "type fast" safe — invalid intermediate states never reach the
 scene def.
+
+**Ctrl+S semantics in the behavior editor:** Ctrl+S does NOT apply the
+inline behavior edit (Ctrl+S globally maps to `PanelAction::SaveScene`,
+which writes the entire `scene.json` to disk). Two outcomes:
+
+- If the inline editor is `dirty` AND valid AND not yet applied: `Ctrl+S`
+  emits `PanelAction::SetStatus("behavior modified — press Apply first")`
+  (does NOT save). This protects authors from losing un-applied edits to disk.
+- If the inline editor is `dirty` AND `parsed` is set (already applied):
+  `Ctrl+S` writes the scene to disk as normal, picking up the applied change.
+
+The standalone `BehaviorEditorPanel` does NOT have this guard — there is no
+separate Apply step for standalone files (§3.3), so Ctrl+S there is the
+direct save.
 
 ### 3.3 Standalone behavior files (`BehaviorEditorPanel`)
 
@@ -327,6 +353,13 @@ Saved at `<project_root>/behaviors/<id>.behavior.json`. Authoring flow:
 - Same `JsonPathLsp`-driven editing + Apply → file write.
 - "Apply" in this panel writes the file directly (no scene def to mutate).
 - "Bind to node…" affordance is **not** in E2 (E3+).
+
+`id` is metadata-only in E2: the file is a self-contained behavior object;
+no `Node.behaviors[i]` entry references it by `id` yet. The mechanism for
+referencing a standalone behavior from `Node.behaviors[i]` (e.g., a
+`BehaviorRef { ref: "tower.target_priority" }` variant) is deferred to
+E3+. E2 ships only the inline behavior editing path; the standalone path
+is for offline authoring + future hookup.
 
 `BehaviorEditorState`:
 
@@ -361,9 +394,14 @@ use std::io::{BufRead, Write, Read};
 pub struct LspClient {
     child: Child,
     stdin: std::process::ChildStdin,
+    /// Inbound messages: server-to-client responses and notifications. All
+    /// responses include their `id`; notifications have `id = None`.
     stdout_rx: mpsc::Receiver<LspMessage>,
-    pending: HashMap<i64, oneshot::Sender<LspResponse>>,
-    next_id: i64,
+    /// Outbound completions: completion request id → consumer's oneshot
+    /// sender. Stored in an `Arc<Mutex<…>>` so the reader thread can resolve
+    /// responses to their requesters.
+    pending: Arc<Mutex<HashMap<i64, mpsc::SyncSender<LspResponse>>>>,
+    next_id: AtomicI64,
     workspace_root: PathBuf,
 }
 
@@ -388,6 +426,21 @@ pub struct LspDiagnostic {
     pub message: String,
 }
 ```
+
+**Sync transport, no tokio dependency.** The LSP client uses
+`std::sync::mpsc` exclusively:
+
+- Inbound messages: reader thread posts every framed message to
+  `stdout_rx`.
+- Outbound request→response correlation: `pending` is wrapped in
+  `Arc<Mutex<…>>`. When the reader thread sees a response (message with
+  `id` matching a pending entry), it locks the map, removes the entry, and
+  sends the `LspResponse` on the per-request `mpsc::SyncSender`. Callers
+  hold the `mpsc::Receiver` and `recv_timeout` for the response.
+
+This deliberately avoids `tokio::sync::oneshot`, `tokio::sync::Mutex`, and
+async runtimes — keeping `craft-editor`'s dependency footprint minimal
+and consistent with ADR 0015 (engine is single-threaded).
 
 ### 4.2 Subprocess lifecycle
 
@@ -489,15 +542,21 @@ local SignalBus = {}
 return {}
 ```
 
-Regenerated only when the existing `craft_schema::SCHEMA_VERSION` differs from
-the comment header in the on-disk `.craft/engine_types.lua`. Manual
-`Regenerate stubs` button in the panel header for force-rerun.
+Regeneration rules:
+
+- If `.craft/engine_types.lua` does not exist → write it (first-run case).
+- If it exists and the `-- schema-version:` line matches `craft_schema::SCHEMA_VERSION` → no-op.
+- If it exists and the version differs → overwrite.
+
+Manual `Regenerate stubs` button in the panel header for force-rerun
+(skips the version check).
 
 **Stub header substitution:** the stub is generated by
 `format!("-- schema-version: {}\n-- AUTO-GENERATED by craft-editor. Do not edit.\n\n{}",
          craft_schema::SCHEMA_VERSION,
-         include_str!("..."))`. The first line is the canonical version stamp
-read on subsequent regenerations; the second line is human-readable.
+         craft_schema::lua_engine_stub())`. The first line is the canonical
+version stamp read on subsequent regenerations; the second line is
+human-readable.
 
 The exact set of fields/methods exposed comes from a new function in
 `craft-schema`:
@@ -575,11 +634,13 @@ pub fn read_lua_section(root: &Path) -> CraftTomlLua {
     let Ok(text) = std::fs::read_to_string(&manifest) else {
         return CraftTomlLua::default();
     };
-    text.parse::<toml::Value>()
-        .ok()
-        .and_then(|v| v.get("lua").cloned())
-        .and_then(|v| toml::from_value::<CraftTomlLua>(v).ok())
-        .unwrap_or_default()
+    let Ok(table) = text.parse::<toml::Table>() else {
+        return CraftTomlLua::default();
+    };
+    let Some(lua_value) = table.get("lua").cloned() else {
+        return CraftTomlLua::default();
+    };
+    toml::from_value::<CraftTomlLua>(lua_value).unwrap_or_default()
 }
 ```
 
@@ -596,9 +657,9 @@ runs immediately after the scene load succeeds:
 1. Read `scene_json_path`'s parent directory (call it `project_root`).
 2. Call `crate::io::project::read_lua_section(project_root)`.
 3. If `modules_dir` is `Some(rel)` AND the resolved path exists on disk:
+   - Resolve `absolute_path = project_root.join(rel)` (relative paths in
+     `craft.toml` are relative to the manifest, not to CWD).
    - Call `state.engine.lua_runtime_mut().map(|rt| rt.set_modules_dir(absolute_path))`.
-   - Errors from `set_modules_dir` are surfaced as `state.ui.status_message`
-     warnings; the runtime is left in its inert default state.
 4. If `modules_dir` is `None` or the resolved path doesn't exist, do nothing
    (Lua runtime stays inert; `reload_class` calls still succeed because
    `set_modules_dir` is only required for `require()` from in-game scripts,
@@ -606,23 +667,55 @@ runs immediately after the scene load succeeds:
 
 No new entry point, no new signature. Existing tests keep working.
 
+Note: `LuaRuntime::set_modules_dir` returns `()` (does not return a Result).
+A bad `modules_dir` path is therefore not detected at this point; it
+surfaces later when game scripts attempt `require()` and fail. This is
+acceptable for E2 because the editor's primary use of Lua is direct
+`reload_class`, not game-script `require()`.
+
 ## 5. State persistence
 
-E2 adds:
+E2 adds to `EditorState`:
 
 ```rust
-// crates/craft-editor/src/state.rs
+// crates/craft-editor/src/state.rs (additions)
 
 pub struct EditorState {
     // ... existing E1 fields
     pub lua_editor: LuaEditorState,        // NEW
-    pub standalone_behavior: BehaviorEditorState,  // NEW (current file)
+    pub standalone_behavior: BehaviorEditorState,  // NEW (current file; section §3.3)
+}
+
+pub struct InspectorState {
+    // ... existing E1 fields
+    pub expanded_behaviors: HashSet<(String, usize)>,   // NEW (section §3.1)
+    pub behavior_edits: HashMap<(String, usize), BehaviorEditState>,  // NEW (section §3.1)
+    pub last_validation_ms: u64,           // NEW (section §3.1)
 }
 ```
 
-Neither is persisted to disk across editor sessions in E2 (open Lua/behavior
-files re-open empty). Window/dock layout persistence (E1) covers layout
-restoration; "remember open files" is deferred to E3.
+`LuaEditorState` is defined in §4.1 and `BehaviorEditorState` in §3.3.
+
+**Default impl update:** `crates/craft-editor/src/state.rs` has a manual
+`impl Default for EditorState` (E1) and `impl Default for InspectorState`
+(implicit, via `#[derive(Default)]`). E2's new fields must be initialized
+in the `EditorState::default()` body and added to `InspectorState`'s
+`Default` derive. A planner must update both.
+
+Neither new field is persisted to disk across editor sessions in E2 (open
+Lua/behavior files re-open empty). Window/dock layout persistence (E1)
+covers layout restoration; "remember open files" is deferred to E3.
+
+### 5.1 Index-keyed behavior edits caveat
+
+`behavior_edits` and `expanded_behaviors` are keyed by
+`(node_id: String, behavior_idx: usize)`. Apply mutates
+`scene.def.nodes[node_id].behaviors[behavior_idx]` in place but does NOT
+reorder, so indices stay valid as long as no upstream Inspector action
+inserts/removes/reorders behaviors during an open edit session. If a
+future E2.x action does reorder, the planner must add an explicit refresh
+step. The alternative (keying on a stable behavior id) is deferred to v3
+when the standalone format's `id` field becomes universal.
 
 ## 6. Testing strategy
 
@@ -654,21 +747,31 @@ restoration; "remember open files" is deferred to E3.
 ### 6.2 Integration tests
 
 `crates/craft-editor/tests/e2_inspector_behavior.rs`:
-- Load `games/tower_defense/scene.json` into an `EditorState` fixture
-- Open behavior 0 in the inline editor
-- Mutate buffer to invalid JSON → assert `errors` contains a parse error
-- Mutate buffer to invalid `target.type` → assert schema flags it
-- Mutate buffer to valid behavior → assert `errors` is empty
-- Apply → assert `scene.def.nodes[..].behaviors[..]` reflects the edit
+- Load `games/tower_defense/scene.json` into an `EditorState` fixture.
+- "Open behavior 0" programmatically means: insert a `BehaviorEditState`
+  directly into `state.panels.inspector.behavior_edits` for the first node's
+  first behavior. The test does not simulate the row-click UI affordance
+  (that's covered by `e2_panels_kittest` below). It does insert into
+  `expanded_behaviors` so the inspector renders the editor pane.
+- Mutate buffer to invalid JSON → assert `errors` contains a parse error.
+- Mutate buffer to invalid `target.type` → assert schema flags it.
+- Mutate buffer to valid behavior → assert `errors` is empty.
+- Apply → assert `scene.def.nodes[..].behaviors[..]` reflects the edit AND
+  `state.scene.as_ref().unwrap().is_dirty()` returns `true` (proves the
+  hash mismatch propagated, and that `last_saved_hash` was NOT spuriously
+  updated by Apply).
 
 `crates/craft-editor/tests/e2_lua_editor.rs`:
 - Helper `lua_ls_available() -> bool` via `which::which("lua-language-server")`.
   If false, the test body returns `Ok(())` with an `eprintln!("skip: LuaLS missing")`.
-- Spawn `LspClient` against a tempdir, send `initialize` → expect `InitializeResult` with `capabilities`.
+- Spawn `LspClient` against a tempdir, send `initialize` → expect
+  `InitializeResult` with `capabilities` via `recv_timeout(2s)`.
 - Send `textDocument/didOpen` for a sample Lua file with a syntax error → expect
   `textDocument/publishDiagnostics` notification within 5 seconds.
-- Save + call `reload_class` → assert subsequent `tick` does not crash on the
-  class (covered indirectly by `editor.engine.engine.tick()` not erroring).
+- Save + call `LuaRuntime::reload_class(name, source)` directly (bypassing the
+  Lua editor panel) → assert it returns `Ok(())`. Then call
+  `engine.tick()` (via `EditorEngine::step()`) and assert no panic on the
+  unknown-class path.
 
 `crates/craft-editor/tests/e2_panels_kittest.rs`:
 - Render smoke tests for `BehaviorEditorPanel` and `LuaEditorPanel` (both in
@@ -814,14 +917,18 @@ pub struct FileChangePending {
 - [ ] Ctrl+Space at object key position → completion popup shows schema-allowed keys
 - [ ] Ctrl+Space at value position → enum values or type default snippet
 - [ ] Apply button appears only when errors is empty
-- [ ] Apply mutates `scene.def.nodes[node_id].behaviors[behavior_idx]`; mark `dirty`
-- [ ] Ctrl+S in the editor → Apply + save to disk + status bar reflects
+- [ ] Apply (button or Ctrl+Enter) mutates `scene.def.nodes[node_id].behaviors[behavior_idx]`;
+      `is_dirty()` returns `true` after Apply; `last_saved_hash` is NOT updated
+- [ ] Ctrl+S in the editor with un-applied dirty buffer → status bar warns
+      `behavior modified — press Apply first`; does NOT save
+- [ ] Ctrl+S in the editor after Apply → writes scene.json to disk
+      (`save_dirty()` updates `last_saved_hash`)
 
 ### Standalone behavior editor
 
 - [ ] File Browser double-click `.behavior.json` → `BehaviorEditorPanel` opens with file content
 - [ ] Same JSON editor + schema-LSP affordances as Inspector inline
-- [ ] Apply writes the file directly
+- [ ] Apply writes the file directly (no separate Ctrl+S needed)
 - [ ] Closing panel without save → buffer kept as draft (warns if dirty)
 
 ### Lua editor
