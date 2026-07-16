@@ -32,3 +32,4 @@ toml = { workspace = true }
 egui_kittest = "0.31"
 egui-winit = { version = "0.31", features = ["accesskit"] }
 tempfile = "3"
+tower_defense = { path = "../../games/tower_defense" }
