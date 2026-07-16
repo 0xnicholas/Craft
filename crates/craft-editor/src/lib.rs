@@ -7,6 +7,7 @@ pub mod io;
 pub mod json_path;
 pub mod lsp;
 pub mod lua_lsp;
+pub mod lua_stub_gen;
 pub mod menu;
 pub mod panels;
 pub mod persist;
