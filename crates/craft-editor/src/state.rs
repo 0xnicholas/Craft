@@ -3,16 +3,33 @@ use std::path::PathBuf;
 
 use craft_kernel::Scene;
 
+use crate::engine::EditorEngine;
 pub use crate::error::EditorError;
 
 pub struct EditorState {
     pub project: Option<ProjectState>,
     pub scene: Option<SceneState>,
+    pub engine: EditorEngine,
     pub panels: PanelsState,
     pub ui: UiState,
     pub errors: Vec<EditorError>,
     pub lsp: LspManager,
     pub dock_kind: DockKind,
+}
+
+impl Default for EditorState {
+    fn default() -> Self {
+        Self {
+            project: None,
+            scene: None,
+            engine: EditorEngine::default(),
+            panels: PanelsState::default(),
+            ui: UiState::default(),
+            errors: Vec::new(),
+            lsp: LspManager,
+            dock_kind: DockKind::default(),
+        }
+    }
 }
 
 pub struct ProjectState {
@@ -45,6 +62,11 @@ impl EditorState {
     }
 
     pub fn open_scene(&mut self, path: &std::path::Path) -> Result<(), EditorError> {
+        self.engine
+            .load_scene_file(path)
+            .map_err(|e| EditorError::Other {
+                message: e.to_string(),
+            })?;
         let registry = craft_kernel::NodeRegistry::new();
         let def = crate::io::load_scene(path, &registry)?;
         let last_saved_hash = craft_kernel::hash_scene_state(&def);
@@ -58,6 +80,7 @@ impl EditorState {
     }
 }
 
+#[derive(Default)]
 pub struct UiState {
     pub status_message: String,
     pub file_change_pending: Option<PathBuf>,
@@ -71,6 +94,24 @@ pub struct PanelsState {
     pub behavior_editor: BehaviorEditorStub,
     pub lua_editor: LuaEditorStub,
     pub agent_panel: AgentPanelStub,
+}
+
+impl Default for PanelsState {
+    fn default() -> Self {
+        Self {
+            scene_tree: SceneTreeState {
+                selected_node: None,
+                expanded_nodes: HashSet::new(),
+                filter_text: String::new(),
+            },
+            inspector: InspectorState::default(),
+            file_browser: FileBrowserState::default(),
+            terminal_preview: TerminalPreviewState::default(),
+            behavior_editor: BehaviorEditorStub,
+            lua_editor: LuaEditorStub,
+            agent_panel: AgentPanelStub,
+        }
+    }
 }
 
 pub struct SceneTreeState {

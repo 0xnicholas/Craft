@@ -43,10 +43,12 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             PanelAction::OpenScene(p) => {
                 let _ = state.open_scene(&p);
             }
-            PanelAction::RunScene => {}
-            PanelAction::StopScene => {}
-            PanelAction::StepTick => {}
-            PanelAction::ReloadScene => {}
+            PanelAction::RunScene => state.engine.is_running = true,
+            PanelAction::StopScene => state.engine.stop(),
+            PanelAction::StepTick => state.engine.step(),
+            PanelAction::ReloadScene => {
+                let _ = state.engine.reload();
+            }
         }
     }
 }
