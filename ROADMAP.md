@@ -1,6 +1,12 @@
 # Roadmap
 
-**Status**: v1 engine implementation complete (`61f0f0a`). M1–M10 merged. 6 of 7 v1 exit criteria satisfied; one remains: reproducible 3/4 benchmark runs.
+**Status**: v1 + v1.5 complete. Tagged `v0.1.0`.
+
+- M1–M10 (v1 engine core + reference game): all 10 milestones closed
+- L1–L3 (v1.5 Lua scripting): VM + bindings, class lifecycle, determinism + module loader all closed
+- 346 tests passing; clippy/fmt clean; coverage gate in place
+
+**One outstanding item** (per `v0.1.0` tag notes): reproducible 3/4 benchmark runs requires an LLM API key and is deferred from `v0.1.0` cut.
 
 ## v1: Engine Core + Reference Game
 
