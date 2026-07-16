@@ -32,6 +32,32 @@ impl SceneState {
     }
 }
 
+impl EditorState {
+    pub fn save_dirty(&mut self) -> Result<(), EditorError> {
+        if let Some(scene) = &mut self.scene {
+            if scene.is_dirty() {
+                let path = scene.path.clone();
+                crate::io::save_scene(&path, &scene.def)?;
+                scene.last_saved_hash = craft_kernel::hash_scene_state(&scene.def);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn open_scene(&mut self, path: &std::path::Path) -> Result<(), EditorError> {
+        let registry = craft_kernel::NodeRegistry::new();
+        let def = crate::io::load_scene(path, &registry)?;
+        let last_saved_hash = craft_kernel::hash_scene_state(&def);
+        self.scene = Some(SceneState {
+            path: path.to_path_buf(),
+            def,
+            last_saved_hash,
+            file_watcher_epoch: 0,
+        });
+        Ok(())
+    }
+}
+
 pub struct UiState {
     pub status_message: String,
     pub file_change_pending: Option<PathBuf>,
