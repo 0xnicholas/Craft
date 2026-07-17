@@ -146,16 +146,10 @@ impl eframe::App for EditorApp {
             }
         }
         if do_undo {
-            let mut ur =
-                std::mem::replace(&mut self.state.undo_redo, crate::undo::UndoRedo::new(100));
-            ur.undo(&mut self.state);
-            self.state.undo_redo = ur;
+            self.state.undo();
         }
         if do_redo {
-            let mut ur =
-                std::mem::replace(&mut self.state.undo_redo, crate::undo::UndoRedo::new(100));
-            ur.redo(&mut self.state);
-            self.state.undo_redo = ur;
+            self.state.redo();
         }
 
         if let Some(w) = &self.watcher {

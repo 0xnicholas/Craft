@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use craft_kernel::behavior::Action;
 use craft_kernel::scene::{ComponentValue, NodeRegistry};
-use craft_kernel::{Component, Engine, Scene};
+use craft_kernel::{Engine, Scene};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkSpec {
@@ -346,11 +346,6 @@ pub fn assert_report_passes(r: &Report) {
             r.name, r.final_hash, r.expected_hash, r.hash_match
         );
     }
-}
-
-#[allow(dead_code)]
-fn _unused_comp(c: &Component) -> &ComponentValue {
-    &c.value
 }
 
 #[cfg(test)]

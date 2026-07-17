@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use egui::Ui;
 
 use crate::agent::SYSTEM_PROMPT;
-use crate::state::{DockKind, EditorError, EditorState};
+use crate::state::{EditorError, EditorState};
 
 #[derive(Debug, Clone)]
 pub enum PanelAction {
@@ -178,11 +178,6 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             }
         }
     }
-}
-
-#[allow(dead_code)]
-fn _kind_check(kind: DockKind) -> DockKind {
-    kind
 }
 
 fn dispatch_add_child_node(state: &mut EditorState, parent_id: &str) {

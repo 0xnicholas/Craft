@@ -68,27 +68,30 @@ impl Panel for InspectorPanel {
             for key in keys {
                 ui.horizontal(|ui| {
                     ui.label(&key);
-                    let comp = node.components.get_mut(&key).expect("key exists");
-                    match &mut comp.value {
-                        ComponentValue::Int(v) => {
-                            ui.add(egui::DragValue::new(v));
+                    if let Some(comp) = node.components.get_mut(&key) {
+                        match &mut comp.value {
+                            ComponentValue::Int(v) => {
+                                ui.add(egui::DragValue::new(v));
+                            }
+                            ComponentValue::Float(v) => {
+                                ui.add(egui::DragValue::new(v).speed(0.1));
+                            }
+                            ComponentValue::String(v) => {
+                                ui.text_edit_singleline(v);
+                            }
+                            ComponentValue::Bool(v) => {
+                                ui.checkbox(v, "");
+                            }
+                            ComponentValue::Vec2([x, y]) => {
+                                ui.add(egui::DragValue::new(x));
+                                ui.add(egui::DragValue::new(y));
+                            }
+                            ComponentValue::Nil => {
+                                ui.label("nil");
+                            }
                         }
-                        ComponentValue::Float(v) => {
-                            ui.add(egui::DragValue::new(v).speed(0.1));
-                        }
-                        ComponentValue::String(v) => {
-                            ui.text_edit_singleline(v);
-                        }
-                        ComponentValue::Bool(v) => {
-                            ui.checkbox(v, "");
-                        }
-                        ComponentValue::Vec2([x, y]) => {
-                            ui.add(egui::DragValue::new(x));
-                            ui.add(egui::DragValue::new(y));
-                        }
-                        ComponentValue::Nil => {
-                            ui.label("nil");
-                        }
+                    } else {
+                        ui.colored_label(egui::Color32::RED, "<missing>");
                     }
                 });
             }

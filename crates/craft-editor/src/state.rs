@@ -66,6 +66,20 @@ impl SceneState {
 }
 
 impl EditorState {
+    pub fn undo(&mut self) -> bool {
+        let mut ur = std::mem::replace(&mut self.undo_redo, crate::undo::UndoRedo::new(100));
+        let result = ur.undo(self);
+        self.undo_redo = ur;
+        result
+    }
+
+    pub fn redo(&mut self) -> bool {
+        let mut ur = std::mem::replace(&mut self.undo_redo, crate::undo::UndoRedo::new(100));
+        let result = ur.redo(self);
+        self.undo_redo = ur;
+        result
+    }
+
     pub fn save_dirty(&mut self) -> Result<(), EditorError> {
         if let Some(scene) = &mut self.scene {
             if scene.is_dirty() {
