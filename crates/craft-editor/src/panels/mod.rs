@@ -15,6 +15,8 @@ pub enum PanelAction {
     SetStatus(String),
     ReportError(EditorError),
     RequestQuit,
+    OpenBehaviorFile(PathBuf),
+    OpenLuaFile(PathBuf),
 }
 
 pub trait Panel {
@@ -56,6 +58,12 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             PanelAction::StepTick => state.engine.step(),
             PanelAction::ReloadScene => {
                 let _ = state.engine.reload();
+            }
+            PanelAction::OpenBehaviorFile(path) => {
+                crate::panels::behavior_editor::open_file(state, path);
+            }
+            PanelAction::OpenLuaFile(path) => {
+                crate::panels::lua_editor::open_file(state, path);
             }
         }
     }

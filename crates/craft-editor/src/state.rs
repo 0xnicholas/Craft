@@ -1,10 +1,11 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use craft_kernel::Scene;
 
 use crate::engine::EditorEngine;
 pub use crate::error::EditorError;
+use crate::json_path::{CompletionPopup, SchemaError};
 
 pub struct EditorState {
     pub project: Option<ProjectState>,
@@ -15,6 +16,8 @@ pub struct EditorState {
     pub errors: Vec<EditorError>,
     pub lsp: LspManager,
     pub dock_kind: DockKind,
+    pub lua_editor: LuaEditorState,
+    pub standalone_behavior: BehaviorEditorState,
 }
 
 impl Default for EditorState {
@@ -28,6 +31,8 @@ impl Default for EditorState {
             errors: Vec::new(),
             lsp: LspManager,
             dock_kind: DockKind::default(),
+            lua_editor: LuaEditorState::default(),
+            standalone_behavior: BehaviorEditorState::default(),
         }
     }
 }
@@ -89,7 +94,20 @@ impl EditorState {
 #[derive(Default)]
 pub struct UiState {
     pub status_message: String,
-    pub file_change_pending: Option<PathBuf>,
+    pub file_change_pending: Option<FileChangePending>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileChangePending {
+    pub path: PathBuf,
+    pub kind: FileChangeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileChangeKind {
+    SceneJson,
+    Lua,
+    Behavior,
 }
 
 pub struct PanelsState {
@@ -130,6 +148,9 @@ pub struct SceneTreeState {
 pub struct InspectorState {
     pub search_text: String,
     pub add_component_menu_open: bool,
+    pub expanded_behaviors: HashSet<(String, usize)>,
+    pub behavior_edits: HashMap<(String, usize), BehaviorEditState>,
+    pub last_validation_ms: u64,
 }
 
 #[derive(Default)]
@@ -173,6 +194,65 @@ pub enum FileKind {
     Lua,
     Resource,
     Other,
+}
+
+pub struct LuaEditorState {
+    pub current_path: Option<PathBuf>,
+    pub buffer: String,
+    pub dirty: bool,
+    pub lsp: Option<crate::lua_lsp::LspClient>,
+    pub fallback_mode: bool,
+    pub completion: Option<CompletionPopup>,
+    pub last_validation_ms: u64,
+    pub opened_uris: HashSet<String>,
+    pub pending_completions: HashMap<i64, serde_json::Value>,
+    pub next_completion_id: i64,
+    pub diagnostics: Vec<crate::lua_lsp::LspDiagnostic>,
+    pub completion_requested: bool,
+    pub show_completion_popup: bool,
+}
+
+impl Default for LuaEditorState {
+    fn default() -> Self {
+        Self {
+            current_path: None,
+            buffer: String::new(),
+            dirty: false,
+            lsp: None,
+            fallback_mode: false,
+            completion: None,
+            last_validation_ms: 0,
+            opened_uris: HashSet::new(),
+            pending_completions: HashMap::new(),
+            next_completion_id: 1,
+            diagnostics: Vec::new(),
+            completion_requested: false,
+            show_completion_popup: false,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct BehaviorEditorState {
+    pub path: Option<PathBuf>,
+    pub buffer: String,
+    pub errors: Vec<SchemaError>,
+    pub completion: Option<CompletionPopup>,
+    pub dirty: bool,
+}
+
+pub struct BehaviorEditState {
+    pub node_id: String,
+    pub behavior_idx: usize,
+    pub buffer: String,
+    pub parsed: Option<craft_kernel::Behavior>,
+    pub errors: Vec<SchemaError>,
+    pub completion: Option<CompletionPopup>,
+    pub dirty: bool,
+}
+
+pub fn json_path_lsp() -> crate::json_path::JsonPathLsp {
+    crate::json_path::JsonPathLsp::new(craft_schema::get_full_schema())
 }
 
 #[cfg(test)]

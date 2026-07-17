@@ -145,6 +145,35 @@ impl LspClient {
         Ok(())
     }
 
+    pub fn send_notification(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> std::io::Result<()> {
+        let msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params
+        });
+        write_lsp_message(&mut self.stdin, &msg)
+    }
+
+    pub fn send_request(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> std::io::Result<i64> {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params
+        });
+        write_lsp_message(&mut self.stdin, &msg)?;
+        Ok(id)
+    }
+
     pub fn shutdown(&mut self) -> std::io::Result<()> {
         let msg = serde_json::json!({
             "jsonrpc": "2.0",
@@ -170,6 +199,16 @@ fn write_lsp_message<W: std::io::Write>(w: &mut W, msg: &serde_json::Value) -> s
     w.write_all(&body)?;
     w.flush()?;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct LspDiagnostic {
+    pub line: u32,
+    pub col: u32,
+    pub end_line: u32,
+    pub end_col: u32,
+    pub severity: crate::json_path::Severity,
+    pub message: String,
 }
 
 #[derive(Debug)]

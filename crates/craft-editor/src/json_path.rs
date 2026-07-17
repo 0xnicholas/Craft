@@ -79,11 +79,17 @@ impl JsonPathLsp {
                     i += 1;
                 }
                 b'{' => {
-                    stack.push(ContainerState::Object { expect_key: true });
+                    stack.push(ContainerState::Object {
+                        expect_key: true,
+                        path_len_on_entry: path.len(),
+                    });
                     i += 1;
                 }
                 b'[' => {
-                    stack.push(ContainerState::Array { next_index: 0 });
+                    stack.push(ContainerState::Array {
+                        next_index: 0,
+                        path_len_on_entry: path.len(),
+                    });
                     i += 1;
                 }
                 b'}' | b']' => {
@@ -93,10 +99,16 @@ impl JsonPathLsp {
                     i += 1;
                 }
                 b',' => {
-                    if let Some(ContainerState::Object { expect_key }) = stack.last_mut() {
+                    if let Some(ContainerState::Object { expect_key, .. }) = stack.last_mut() {
                         *expect_key = true;
-                    } else if let Some(ContainerState::Array { next_index }) = stack.last_mut() {
+                    } else if let Some(ContainerState::Array {
+                        next_index,
+                        path_len_on_entry,
+                    }) = stack.last_mut()
+                    {
                         *next_index += 1;
+                        path.truncate(*path_len_on_entry);
+                        path.push(PathSeg::Index(*next_index));
                     }
                     i += 1;
                 }
@@ -104,8 +116,12 @@ impl JsonPathLsp {
                     let (consumed, value) = parse_string(bytes, i);
                     if let Some(top) = stack.last_mut() {
                         match top {
-                            ContainerState::Object { expect_key } => {
+                            ContainerState::Object {
+                                expect_key,
+                                path_len_on_entry,
+                            } => {
                                 if *expect_key {
+                                    path.truncate(*path_len_on_entry);
                                     path.push(PathSeg::Key(value.clone()));
                                     *expect_key = false;
                                     if let Some(peek) = bytes.get(i + consumed) {
@@ -130,28 +146,133 @@ impl JsonPathLsp {
             }
         }
 
-        if let Some(ContainerState::Array { next_index }) = stack.last() {
+        if let Some(ContainerState::Array {
+            next_index,
+            path_len_on_entry,
+        }) = stack.last()
+        {
+            path.truncate(*path_len_on_entry);
             path.push(PathSeg::Index(*next_index));
         }
 
         path
     }
 
-    #[allow(dead_code)]
-    pub fn complete(&self, _path: &[PathSeg], _ctx: &CursorCtx) -> Vec<Completion> {
-        Vec::new()
+    pub fn complete(&self, path: &[PathSeg], ctx: &CursorCtx) -> Vec<Completion> {
+        if ctx.in_object_key {
+            let schema = self
+                .lookup(path)
+                .filter(|s| s.get("properties").is_some())
+                .or_else(|| self.lookup_parent(path));
+            let Some(schema) = schema else {
+                return Vec::new();
+            };
+            let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
+                return Vec::new();
+            };
+            props
+                .keys()
+                .map(|k| Completion {
+                    label: k.clone(),
+                    kind: CompletionKind::Property,
+                    detail: schema_detail(props.get(k).unwrap_or(&Value::Null)),
+                    insert_text: format!("\"{k}\": "),
+                    insert_range: 0..ctx.partial_token.len(),
+                })
+                .collect()
+        } else if ctx.in_object_value {
+            let Some(schema) = self.lookup(path) else {
+                return Vec::new();
+            };
+            if let Some(enum_values) = schema.get("enum").and_then(|e| e.as_array()) {
+                return enum_values
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .map(|s| Completion {
+                        label: s.clone(),
+                        kind: CompletionKind::Value,
+                        detail: None,
+                        insert_text: s,
+                        insert_range: 0..ctx.partial_token.len(),
+                    })
+                    .collect();
+            }
+            let snippet = match schema.get("type").and_then(|t| t.as_str()) {
+                Some("string") => "\"\"",
+                Some("integer") | Some("number") => "0",
+                Some("boolean") => "false",
+                Some("object") => "{}",
+                Some("array") => "[]",
+                _ => return Vec::new(),
+            };
+            vec![Completion {
+                label: snippet.to_string(),
+                kind: CompletionKind::Snippet,
+                detail: schema_detail(schema),
+                insert_text: snippet.to_string(),
+                insert_range: 0..ctx.partial_token.len(),
+            }]
+        } else {
+            Vec::new()
+        }
     }
 
-    #[allow(dead_code)]
-    pub fn validate(&self, _buffer: &str) -> Vec<SchemaError> {
-        Vec::new()
+    pub fn validate(&self, buffer: &str) -> Vec<SchemaError> {
+        let parsed: Value = match serde_json::from_str(buffer) {
+            Ok(v) => v,
+            Err(e) => {
+                let (line, col) = byte_offset_to_line_col(buffer, e.column());
+                return vec![SchemaError {
+                    line,
+                    col,
+                    message: format!("invalid JSON: {e}"),
+                    severity: Severity::Error,
+                }];
+            }
+        };
+
+        let mut errors = Vec::new();
+        validate_value(&parsed, &self.schema_root, &[], buffer, &mut errors);
+        errors
+    }
+
+    fn lookup(&self, path: &[PathSeg]) -> Option<&Value> {
+        let mut current = &self.schema_root;
+        for seg in path {
+            current = self.step(current, seg)?;
+        }
+        Some(current)
+    }
+
+    fn lookup_parent(&self, path: &[PathSeg]) -> Option<&Value> {
+        if path.is_empty() {
+            return Some(&self.schema_root);
+        }
+        let parent_path = &path[..path.len() - 1];
+        self.lookup(parent_path)
+    }
+
+    fn step<'a>(&self, current: &'a Value, seg: &PathSeg) -> Option<&'a Value> {
+        match seg {
+            PathSeg::Key(k) => current
+                .get("properties")
+                .and_then(|p| p.get(k))
+                .or_else(|| current.get(k)),
+            PathSeg::Index(i) => current.get("items").or_else(|| current.as_array()?.get(*i)),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 enum ContainerState {
-    Object { expect_key: bool },
-    Array { next_index: usize },
+    Object {
+        expect_key: bool,
+        path_len_on_entry: usize,
+    },
+    Array {
+        next_index: usize,
+        path_len_on_entry: usize,
+    },
 }
 
 fn parse_string(bytes: &[u8], start: usize) -> (usize, String) {
@@ -193,6 +314,106 @@ fn skip_literal(bytes: &[u8], start: usize) -> usize {
         }
     }
     i
+}
+
+fn schema_detail(schema: &Value) -> Option<String> {
+    schema
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(|t| t.to_string())
+}
+
+fn validate_value(
+    value: &Value,
+    schema: &Value,
+    path: &[PathSeg],
+    buffer: &str,
+    errors: &mut Vec<SchemaError>,
+) {
+    if let Some(required) = schema.get("required").and_then(|r| r.as_array()) {
+        if let Some(obj) = value.as_object() {
+            for req in required {
+                if let Some(key) = req.as_str() {
+                    if !obj.contains_key(key) {
+                        let offset = buffer_offset_for_path(buffer, path);
+                        let (line, col) = byte_offset_to_line_col(buffer, offset);
+                        errors.push(SchemaError {
+                            line,
+                            col,
+                            message: format!("missing required property: {key}"),
+                            severity: Severity::Error,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        if let Some(obj) = value.as_object() {
+            for (key, val) in obj {
+                let prop_schema = properties.get(key);
+                if prop_schema.is_none() {
+                    let offset = buffer_offset_for_path(buffer, path) + key.len() + 4;
+                    let (line, col) = byte_offset_to_line_col(buffer, offset);
+                    errors.push(SchemaError {
+                        line,
+                        col,
+                        message: format!("unknown property: {key}"),
+                        severity: Severity::Warning,
+                    });
+                } else if let Some(ps) = prop_schema {
+                    if let Some(expected) = ps.get("type").and_then(|t| t.as_str()) {
+                        let actual_ok = match expected {
+                            "string" => val.is_string(),
+                            "integer" => val.is_i64() || val.is_u64(),
+                            "number" => val.is_number(),
+                            "boolean" => val.is_boolean(),
+                            "object" => val.is_object(),
+                            "array" => val.is_array(),
+                            _ => true,
+                        };
+                        if !actual_ok {
+                            let offset = buffer_offset_for_path(buffer, path) + key.len() + 4;
+                            let (line, col) = byte_offset_to_line_col(buffer, offset);
+                            errors.push(SchemaError {
+                                line,
+                                col,
+                                message: format!("type mismatch: {key} expected {expected}"),
+                                severity: Severity::Error,
+                            });
+                        }
+                    }
+                    if let Some(enum_values) = ps.get("enum").and_then(|e| e.as_array()) {
+                        if let Some(s) = val.as_str() {
+                            if !enum_values.iter().any(|v| v.as_str() == Some(s)) {
+                                let offset = buffer_offset_for_path(buffer, path) + key.len() + 4;
+                                let (line, col) = byte_offset_to_line_col(buffer, offset);
+                                errors.push(SchemaError {
+                                    line,
+                                    col,
+                                    message: format!("{key}: invalid enum value: {s}"),
+                                    severity: Severity::Error,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn byte_offset_to_line_col(buffer: &str, offset: usize) -> (u32, u32) {
+    let prefix = &buffer[..offset.min(buffer.len())];
+    let line = prefix.bytes().filter(|b| *b == b'\n').count() as u32;
+    let last_nl = prefix.rfind('\n').map(|p| p + 1).unwrap_or(0);
+    let col = (offset.saturating_sub(last_nl)) as u32;
+    (line, col)
+}
+
+fn buffer_offset_for_path(_buffer: &str, _path: &[PathSeg]) -> usize {
+    0
 }
 
 #[cfg(test)]
@@ -244,5 +465,121 @@ mod tests {
         let buf = r#"{"foo": "bar", "#;
         let path = lsp.path_at(buf, buf.len());
         assert_eq!(path, vec![PathSeg::Key("foo".to_string())]);
+    }
+
+    #[test]
+    fn complete_at_object_key_returns_schema_properties() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "properties": {
+                "kind": { "type": "string" },
+                "params": { "type": "object" }
+            }
+        }));
+        let path = vec![PathSeg::Key("kind".to_string())];
+        let ctx = CursorCtx {
+            in_object_key: true,
+            in_object_value: false,
+            partial_token: String::new(),
+        };
+        let completions = lsp.complete(&path, &ctx);
+        let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
+        assert!(labels.contains(&"kind"));
+        assert!(labels.contains(&"params"));
+        assert!(
+            completions
+                .iter()
+                .all(|c| matches!(c.kind, CompletionKind::Property))
+        );
+    }
+
+    #[test]
+    fn complete_at_enum_returns_enum_values() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "properties": {
+                "kind": { "enum": ["set_state", "emit", "destroy"] }
+            }
+        }));
+        let path = vec![PathSeg::Key("kind".to_string())];
+        let ctx = CursorCtx {
+            in_object_key: false,
+            in_object_value: true,
+            partial_token: String::new(),
+        };
+        let completions = lsp.complete(&path, &ctx);
+        let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, vec!["set_state", "emit", "destroy"]);
+    }
+
+    #[test]
+    fn complete_at_typed_value_returns_snippet() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "properties": {
+                "state": { "type": "string" },
+                "hp": { "type": "integer" }
+            }
+        }));
+        let path = vec![PathSeg::Key("state".to_string())];
+        let ctx = CursorCtx {
+            in_object_key: false,
+            in_object_value: true,
+            partial_token: String::new(),
+        };
+        let completions = lsp.complete(&path, &ctx);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].insert_text, "\"\"");
+        assert!(matches!(completions[0].kind, CompletionKind::Snippet));
+    }
+
+    #[test]
+    fn validate_flags_missing_required_property() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "required": ["kind"],
+            "properties": { "kind": { "type": "string" } }
+        }));
+        let errors = lsp.validate("{}");
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message.contains("kind") && matches!(e.severity, Severity::Error))
+        );
+    }
+
+    #[test]
+    fn validate_flags_type_mismatch() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "properties": { "hp": { "type": "integer" } }
+        }));
+        let errors = lsp.validate(r#"{"hp": "not a number"}"#);
+        assert!(errors.iter().any(|e| e.message.contains("hp")));
+    }
+
+    #[test]
+    fn validate_ignores_unknown_property_as_warning() {
+        let lsp = JsonPathLsp::new(json!({
+            "type": "object",
+            "properties": { "kind": { "type": "string" } }
+        }));
+        let errors = lsp.validate(r#"{"kind": "set_state", "unknown_field": true}"#);
+        assert!(errors.iter().any(
+            |e| e.message.contains("unknown_field") && matches!(e.severity, Severity::Warning)
+        ));
+        assert!(
+            errors
+                .iter()
+                .all(|e| !matches!(e.severity, Severity::Error) || e.message.contains("parse"))
+        );
+    }
+
+    #[test]
+    fn validate_returns_parse_error_on_invalid_json() {
+        let lsp = JsonPathLsp::new(json!({"type": "object"}));
+        let errors = lsp.validate("{not valid");
+        assert!(!errors.is_empty());
+        assert!(errors[0].message.to_lowercase().contains("json"));
     }
 }

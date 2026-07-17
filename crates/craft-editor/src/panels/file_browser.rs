@@ -21,6 +21,10 @@ fn classify(path: &Path) -> FileKind {
     if path.is_dir() {
         return FileKind::Directory;
     }
+    let name = path.to_string_lossy();
+    if name.ends_with(".behavior.json") {
+        return FileKind::Behavior;
+    }
     match path.extension().and_then(|e| e.to_str()) {
         Some("lua") => FileKind::Lua,
         Some("json") => FileKind::Scene,
@@ -70,11 +74,8 @@ fn draw_dir(
             if resp.double_clicked() {
                 match kind {
                     FileKind::Scene => actions.push(PanelAction::OpenScene(path.clone())),
-                    FileKind::Lua => {
-                        actions.push(PanelAction::SetStatus(format!(
-                            "Lua editor coming in E2 — {name}"
-                        )));
-                    }
+                    FileKind::Lua => actions.push(PanelAction::OpenLuaFile(path.clone())),
+                    FileKind::Behavior => actions.push(PanelAction::OpenBehaviorFile(path.clone())),
                     _ => {}
                 }
             }

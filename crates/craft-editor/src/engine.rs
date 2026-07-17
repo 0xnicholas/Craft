@@ -50,6 +50,19 @@ impl EditorEngine {
         self.scene_path = Some(path.to_path_buf());
         self.is_running = true;
         self.render_current_scene();
+
+        if let Some(root) = path.parent() {
+            let section = crate::io::project::read_lua_section(root);
+            if let Some(rel) = section.modules_dir {
+                let absolute_path = root.join(&rel);
+                if absolute_path.exists() {
+                    if let Some(rt) = self.lua_runtime.as_mut() {
+                        rt.set_modules_dir(absolute_path);
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -133,4 +146,34 @@ impl Default for EditorEngine {
 
 fn engine_err_from_editor(error: EditorError) -> EngineError {
     EngineError::Internal(error.to_string())
+}
+
+#[cfg(test)]
+mod load_with_lua_tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn load_scene_sets_lua_modules_dir_when_present() {
+        let dir = TempDir::new().unwrap();
+        let project_root = dir.path();
+        let scripts_dir = project_root.join("scripts");
+        fs::create_dir_all(&scripts_dir).unwrap();
+        fs::write(
+            project_root.join("craft.toml"),
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\nkind = \"game\"\n\n[lua]\nmodules_dir = \"scripts\"\n",
+        )
+        .unwrap();
+        let scene_path = project_root.join("scene.json");
+        fs::write(
+            &scene_path,
+            r#"{"kind": "scene", "name": "test", "nodes": []}"#,
+        )
+        .unwrap();
+
+        let mut eng = EditorEngine::new();
+        eng.load_scene_file(&scene_path).expect("load");
+        assert!(eng.lua_runtime.is_some());
+    }
 }

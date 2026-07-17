@@ -9,7 +9,7 @@ use crate::panels::{
     PanelAction, SceneTreePanel, TerminalPreviewPanel,
 };
 use crate::persist;
-use crate::state::{EditorState, ProjectState};
+use crate::state::{EditorState, FileChangeKind, FileChangePending, ProjectState};
 use crate::watcher::{Watcher, WatcherEvent};
 
 pub struct EditorApp {
@@ -83,7 +83,19 @@ impl eframe::App for EditorApp {
 
         ctx.input(|i| {
             if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
-                self.pending_actions.push(PanelAction::SaveScene);
+                let unapplied = self
+                    .state
+                    .panels
+                    .inspector
+                    .behavior_edits
+                    .values()
+                    .any(|e| e.dirty && e.parsed.is_none());
+                if unapplied {
+                    self.state.ui.status_message =
+                        "behavior modified — press Apply first".to_string();
+                } else {
+                    self.pending_actions.push(PanelAction::SaveScene);
+                }
             }
             if i.key_pressed(egui::Key::F5) {
                 self.pending_actions.push(PanelAction::RunScene);
@@ -99,14 +111,29 @@ impl eframe::App for EditorApp {
         if let Some(w) = &self.watcher {
             for ev in w.drain_debounced() {
                 if let WatcherEvent::Changed(p) = ev {
-                    let is_current_scene = self
-                        .state
-                        .scene
-                        .as_ref()
-                        .map(|s| s.path == p)
-                        .unwrap_or(false);
-                    if is_current_scene {
-                        self.state.ui.file_change_pending = Some(p);
+                    let kind = {
+                        let path_str = p.to_string_lossy();
+                        if path_str.ends_with(".behavior.json") {
+                            Some(FileChangeKind::Behavior)
+                        } else if p.extension().and_then(|e| e.to_str()) == Some("lua") {
+                            Some(FileChangeKind::Lua)
+                        } else {
+                            let is_current_scene = self
+                                .state
+                                .scene
+                                .as_ref()
+                                .map(|s| s.path == p)
+                                .unwrap_or(false);
+                            if is_current_scene {
+                                Some(FileChangeKind::SceneJson)
+                            } else {
+                                None
+                            }
+                        }
+                    };
+                    if let Some(kind) = kind {
+                        self.state.ui.file_change_pending =
+                            Some(FileChangePending { path: p, kind });
                     }
                 }
             }
@@ -123,12 +150,32 @@ impl eframe::App for EditorApp {
         self.dock = dock;
         crate::panels::dispatch(pending_from_panels, &mut self.state);
 
-        if let Some(p) = self.state.ui.file_change_pending.clone() {
+        if let Some(pending) = self.state.ui.file_change_pending.clone() {
             egui::TopBottomPanel::bottom("file_change_prompt").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{} changed externally", p.display()));
+                    ui.label(format!("{} changed externally", pending.path.display()));
                     if ui.button("Reload").clicked() {
-                        let _ = self.state.open_scene(&p);
+                        match pending.kind {
+                            FileChangeKind::SceneJson => {
+                                let _ = self.state.open_scene(&pending.path);
+                            }
+                            FileChangeKind::Lua => {
+                                if let Ok(content) = std::fs::read_to_string(&pending.path) {
+                                    self.state.lua_editor.buffer = content;
+                                    self.state.lua_editor.dirty = false;
+                                    self.state.ui.status_message =
+                                        format!("reloaded {}", pending.path.display());
+                                }
+                            }
+                            FileChangeKind::Behavior => {
+                                if let Ok(content) = std::fs::read_to_string(&pending.path) {
+                                    self.state.standalone_behavior.buffer = content;
+                                    self.state.standalone_behavior.dirty = false;
+                                    self.state.ui.status_message =
+                                        format!("reloaded {}", pending.path.display());
+                                }
+                            }
+                        }
                         self.state.ui.file_change_pending = None;
                     }
                     if ui.button("Keep mine").clicked() {
