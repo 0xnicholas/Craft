@@ -56,7 +56,9 @@ impl Panel for InspectorPanel {
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             let node = &mut scene_state.def.nodes[idx];
-            ui.heading(format!("{} ({})", node.type_name, node.id));
+            let icon = crate::theme::node_type_icon(&node.type_name);
+            let color = crate::theme::node_type_color(&node.type_name);
+            ui.colored_label(color, format!("{icon} {} ({})", node.id, node.type_name));
             if let Some(lc) = &node.lua_class {
                 ui.label(format!("lua_class: {lc}"));
             }

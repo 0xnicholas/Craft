@@ -55,7 +55,8 @@ fn draw_subtree(
     let indent = depth as f32 * 12.0;
     ui.horizontal(|ui| {
         ui.add_space(indent);
-        let label = format!("[{}] {}", node.type_name, node.id);
+        let icon = crate::theme::node_type_icon(&node.type_name);
+        let label = format!("{icon} [{}] {}", node.type_name, node.id);
         if ui.selectable_label(selected, label).clicked() {
             state.panels.scene_tree.selected_node = Some(node.id.clone());
         }
