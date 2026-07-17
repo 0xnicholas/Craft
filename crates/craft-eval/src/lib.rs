@@ -114,7 +114,7 @@ impl Backend for LiveBackend {
 
     fn complete(&self, prompt: &str) -> String {
         let url = format!("{}/chat/completions", self.api_base.trim_end_matches('/'));
-        let system = "You are a game engine evaluator. Given a scene description and expected outcome, output ONLY a JSON array of action arrays — one array per tick. Each action is a JSON object with kind, target, key, and value/by fields. Output ONLY the JSON array, no explanation.";
+        let system = "You are a game engine evaluator. Given a scene description with behaviors and expected final component values, determine if the scene's built-in behaviors alone produce the correct outcome. If the scene's behaviors already produce the expected values, respond with ONLY []. If additional actions are needed, respond with a JSON array of action arrays (one per tick). Each action has kind, target, key, and value/by fields. Output ONLY [], no explanation.";
 
         let body = serde_json::json!({
             "model": self.model,

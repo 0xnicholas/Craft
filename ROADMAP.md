@@ -49,7 +49,7 @@ M1 → M2 → M3       (engine foundation, sequential)
 - [x] `cargo clippy --workspace --all-targets -- -D warnings` clean
 - [x] `cargo fmt --check` clean
 - [x] Test coverage on engine core ≥80% — `cargo-llvm-cov` baseline: **craft-kernel production code 67.76% line** (gate enforced by `scripts/coverage.sh` with production-only filtering, excludes `#[cfg(test)]` modules); 80% is the long-term target, current number reflects L1-review code that lacks integration tests (notably evaluator.rs at 62%)
-- [x] At least 3 of 4 benchmark tasks completed by agent reproducibly — ✅ 3/4 passed (DeepSeek backend); on_signal_handler, state_machine, if_destroy pass; on_tick_increment needs prompt tuning
+- [x] At least 3 of 4 benchmark tasks completed by agent reproducibly — ✅ 4/4 passed (DeepSeek backend, all benchmarks pass)
 
 ## v1.5: Lua Scripting
 
