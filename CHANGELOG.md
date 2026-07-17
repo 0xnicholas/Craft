@@ -2,6 +2,31 @@
 
 Per-release notes for Craft. Versions follow the spirit of [Semantic Versioning](https://semver.org/).
 
+## [v0.4.0] — 2026-07-18
+
+Editor E4 polishes the editor experience with undo/redo, shortcuts, context menus, drag-drop, and a visual overhaul.
+
+### Added
+
+- **Undo/Redo**: command-pattern module (100 steps) wired into Inspector, SceneTree, BehaviorEditor, and AgentPanel. Ctrl+Z / Ctrl+Shift+Z.
+- **Keyboard shortcuts**: Ctrl+1-5 (panel focus), Ctrl+Shift+A (add child node), Ctrl+Z/Ctrl+Shift+Z (undo/redo).
+- **Context menus**: scene tree node (Add Child, Duplicate, Delete), file browser (Open, Delete, New File/Folder).
+- **Drag-drop**: scene tree reparent/reorder, file browser .lua → node lua_class attachment.
+- **Visual design language**: egui Visuals override with Craft dark palette (#1A1A2E background, #6C9FFF accent, 4px scrollbars, 0.1s animations). Node type emoji + color icons (🔴 Enemy, 🔵 Tower, 🟢 Player).
+
+## [v0.3.0] — 2026-07-18
+
+Editor E3 adds the Agent Copilot — an AI-powered chat panel for scene authoring.
+
+### Added
+
+- **Agent panel**: chat UI with context bar, streaming text, message bubbles, diff preview modal.
+- **AgentClient**: reqwest-based HTTP client with SSE streaming, non-streaming tool call detection, and AtomicBool concurrency guard.
+- **ToolRegistry**: 6 LLM tools (lint, dry_run, explain, read_scene, read_node, propose_diff) executed locally in the UI thread.
+- **ContextBuilder**: EditorState → AgentContext injection into system prompts.
+- **explain_node**: new `craft-kernel` primitive returning compact structured JSON for LLM consumption.
+- **Thread model**: blocking reqwest calls on background `std::thread`, mpsc channel drain per-frame in UI thread. Max 3-round tool call loop.
+
 ## [v0.2.1] — 2026-07-17
 
 Editor E2 adds behavior and Lua editing to `craft-editor`.

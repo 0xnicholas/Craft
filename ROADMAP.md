@@ -69,8 +69,8 @@ Desktop editor built with egui/eframe, embedded engine. Separate crate (`craft-e
 |---|------------|----------|--------|--------|-------|------------|
 | **E1** | Editor shell + panels | `craft-editor` | 0017, 0018 | ✅ done | `tests/e1_*.rs` (25) | egui app launches; embedded engine instance; Scene Tree, Inspector, File Browser, Terminal Preview panels functional; `egui_dock` layout; F5/F8 run/stop |
 | **E2** | Behavior + Lua editors | `craft-editor` | 0018 (Appx A, B) | ✅ done | `tests/e2_*.rs` (13) | JSON behavior editor with schema auto-complete + inline validation in Inspector; standalone `.behavior.json` editor; Lua editor with LuaLS LSP subprocess (didOpen/didChange/didSave/diagnostics/Ctrl+Space completion); engine type stubs; syntax highlighting; file watcher for .lua/.behavior.json |
-| **E3** | Agent Copilot | `craft-editor` | 0019 | planned | — | Sidebar chat panel; context injection; diff review flow (preview/accept/modify/reject); agent tools map to engine API |
-| **E4** | UX polish | `craft-editor` | 0018 (Appx B) | planned | — | Keyboard shortcuts (Godot-aligned); drag-drop (reparent, file→node); context menus; undo/redo (100-level per-SceneDef); visual design language |
+| **E3** | Agent Copilot | `craft-editor` | 0019 | ✅ done | `tests/e3_*.rs` (4) | Sidebar chat panel; context injection; agent tools (lint, dry_run, explain, read_scene, read_node); diff review flow (preview/accept/reject); reqwest-based LLM backend; `explain_node` kernel primitive |
+| **E4** | UX polish | `craft-editor` | 0018 (Appx B) | ✅ done | `tests/e4_*.rs` (2) | Keyboard shortcuts (Ctrl+Z/Shift+Z undo/redo, Ctrl+1-5 panel focus, Ctrl+Shift+A add child); context menus (scene tree + file browser); drag-drop (reparent, file→node lua_class); UndoRedo command-pattern module (100 steps); visual design language (Craft dark theme + node type emoji icons) |
 
 ## Beyond v2
 

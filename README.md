@@ -99,7 +99,7 @@ Documentation
 Status
 ------
 
-**`v0.1.0` shipped — v1 engine + v1.5 Lua scripting complete.** See `docs/CHANGELOG.md`.
+**`v0.4.0` shipped — v1 engine + v1.5 Lua scripting + v2 Editor complete.** See `docs/CHANGELOG.md`.
 
 - [x] Product requirements (PRD)
 - [x] Architecture decision records (16 ADRs)
@@ -107,9 +107,8 @@ Status
 - [x] Engine core implementation: 10 milestones (M1–M10)
 - [x] Reference game: tower defense (1000 ticks, replayable)
 - [x] Lua scripting: L1 (VM + bindings), L2 (class lifecycle), L3 (determinism + modules)
-- [x] Test infrastructure (346 tests; 4-layer pyramid per ADR 0010)
-- [x] Coverage gate (`scripts/coverage.sh`)
-- [ ] Editor (v2)
+- [x] Editor (v2): E1 (shell + panels), E2 (behavior + Lua editing + LSP), E3 (Agent Copilot + LLM tools), E4 (undo/redo + shortcuts + context menus + drag-drop + visual design)
+- [x] Test infrastructure (468 tests; 4-layer pyramid per ADR 0010)
 - [ ] LLM-driven agent benchmarks — reproducible 3/4 runs deferred (requires API key)
 
 ### Quick Start
