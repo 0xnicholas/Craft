@@ -61,7 +61,8 @@ pub enum AgentError {
     Busy,
 }
 
-pub trait LlmBackend: Send {
+pub trait LlmBackend: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn chat(
         &self,
         messages: &[ChatMessage],
