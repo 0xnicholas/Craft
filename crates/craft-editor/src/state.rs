@@ -144,6 +144,7 @@ impl Default for PanelsState {
                 selected_node: None,
                 expanded_nodes: HashSet::new(),
                 filter_text: String::new(),
+                context_menu: None,
             },
             inspector: InspectorState::default(),
             file_browser: FileBrowserState::default(),
@@ -159,6 +160,7 @@ pub struct SceneTreeState {
     pub selected_node: Option<String>,
     pub expanded_nodes: HashSet<String>,
     pub filter_text: String,
+    pub context_menu: Option<(String, egui::Pos2)>,
 }
 
 #[derive(Default)]
@@ -170,11 +172,22 @@ pub struct InspectorState {
     pub last_validation_ms: u64,
 }
 
-#[derive(Default)]
 pub struct FileBrowserState {
     pub current_dir: PathBuf,
     pub entries: BTreeMap<PathBuf, FileEntry>,
     pub filter: String,
+    pub context_menu: Option<(PathBuf, bool, egui::Pos2)>,
+}
+
+impl Default for FileBrowserState {
+    fn default() -> Self {
+        Self {
+            current_dir: PathBuf::new(),
+            entries: BTreeMap::new(),
+            filter: String::new(),
+            context_menu: None,
+        }
+    }
 }
 
 #[derive(Default)]

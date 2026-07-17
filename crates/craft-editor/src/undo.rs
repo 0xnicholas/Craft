@@ -90,6 +90,10 @@ impl UndoRedo {
         self.actions.clear();
         self.current = -1;
     }
+
+    pub fn actions_len(&self) -> usize {
+        self.actions.len()
+    }
 }
 
 #[cfg(test)]
