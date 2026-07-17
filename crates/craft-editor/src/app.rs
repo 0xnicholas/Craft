@@ -309,6 +309,9 @@ impl eframe::App for EditorApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some(ref client) = self.state.agent_client {
+            client.shutdown();
+        }
         let _ = persist::save_dock(&self.dock);
     }
 }

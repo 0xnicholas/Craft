@@ -96,6 +96,12 @@ impl EditorState {
             last_saved_hash,
             file_watcher_epoch: 0,
         });
+        if self.agent_client.is_none() {
+            if let Some(ref project) = self.project {
+                let config = crate::agent::config::AgentConfig::load(&project.root);
+                self.agent_client = Some(crate::agent::AgentClient::new(config));
+            }
+        }
         Ok(())
     }
 }
