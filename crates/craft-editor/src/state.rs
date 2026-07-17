@@ -19,6 +19,10 @@ pub struct EditorState {
     pub dock_kind: DockKind,
     pub lua_editor: LuaEditorState,
     pub standalone_behavior: BehaviorEditorState,
+    pub agent_client: Option<crate::agent::AgentClient>,
+    pub agent_tool_registry: crate::agent::tools::ToolRegistry,
+    pub agent_rx: Option<std::sync::mpsc::Receiver<crate::agent::AgentStreamEvent>>,
+    pub agent_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Default for EditorState {
@@ -34,6 +38,10 @@ impl Default for EditorState {
             dock_kind: DockKind::default(),
             lua_editor: LuaEditorState::default(),
             standalone_behavior: BehaviorEditorState::default(),
+            agent_client: None,
+            agent_tool_registry: crate::agent::tools::ToolRegistry::new(),
+            agent_rx: None,
+            agent_handle: None,
         }
     }
 }
