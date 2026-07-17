@@ -452,6 +452,56 @@ impl LintCode {
     }
 }
 
+pub fn explain_node(node: &crate::scene::Node, scene: &crate::scene::Scene) -> serde_json::Value {
+    let mut components = serde_json::Map::new();
+    for (key, comp) in &node.components {
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "type".into(),
+            serde_json::Value::String(component_type_name(&comp.value).into()),
+        );
+        obj.insert("value".into(), component_to_json_value(&comp.value));
+        components.insert(key.clone(), serde_json::Value::Object(obj));
+    }
+
+    let children_count = scene
+        .nodes
+        .iter()
+        .filter(|n| n.parent.as_deref() == Some(&node.id))
+        .count();
+
+    serde_json::json!({
+        "id": node.id,
+        "type": node.type_name,
+        "lua_class": node.lua_class,
+        "components": components,
+        "behaviors": node.behaviors.len(),
+        "children": children_count,
+    })
+}
+
+fn component_type_name(v: &crate::scene::ComponentValue) -> &'static str {
+    match v {
+        crate::scene::ComponentValue::Nil => "nil",
+        crate::scene::ComponentValue::Bool(_) => "bool",
+        crate::scene::ComponentValue::Int(_) => "int",
+        crate::scene::ComponentValue::Float(_) => "float",
+        crate::scene::ComponentValue::String(_) => "string",
+        crate::scene::ComponentValue::Vec2(_) => "vec2",
+    }
+}
+
+fn component_to_json_value(v: &crate::scene::ComponentValue) -> serde_json::Value {
+    match v {
+        crate::scene::ComponentValue::Nil => serde_json::Value::Null,
+        crate::scene::ComponentValue::Bool(b) => serde_json::Value::Bool(*b),
+        crate::scene::ComponentValue::Int(i) => serde_json::json!(*i),
+        crate::scene::ComponentValue::Float(f) => serde_json::json!(*f),
+        crate::scene::ComponentValue::String(s) => serde_json::Value::String(s.clone()),
+        crate::scene::ComponentValue::Vec2(arr) => serde_json::json!({ "x": arr[0], "y": arr[1] }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,5 +778,54 @@ mod tests {
                 .any(|w| w.code == LintCode::StateUnreachable),
             "a and b are both reachable"
         );
+    }
+
+    #[test]
+    fn explain_node_returns_structured_json() {
+        use crate::scene::{Node, Scene};
+        use crate::scene::{Component, ComponentValue};
+        use std::collections::BTreeMap;
+
+        let node = Node {
+            id: "test_node".into(),
+            type_name: "Tower".into(),
+            parent: None,
+            components: BTreeMap::from([
+                (
+                    "cooldown".into(),
+                    Component {
+                        value: ComponentValue::Int(5),
+                        kind: Default::default(),
+                    },
+                ),
+                (
+                    "range".into(),
+                    Component {
+                        value: ComponentValue::Float(10.0),
+                        kind: Default::default(),
+                    },
+                ),
+            ]),
+            behaviors: vec![],
+            active_state: None,
+            lua_class: Some("towers.target_priority".into()),
+            destroyed: false,
+        };
+
+        let scene = Scene {
+            kind: "scene".into(),
+            name: "test".into(),
+            nodes: vec![node],
+            spawn_counter: 0,
+        };
+        let explained = &scene.nodes[0];
+
+        let json = explain_node(explained, &scene);
+        assert_eq!(json["id"], "test_node");
+        assert_eq!(json["type"], "Tower");
+        assert_eq!(json["components"]["cooldown"]["type"], "int");
+        assert_eq!(json["components"]["cooldown"]["value"], 5);
+        assert_eq!(json["behaviors"], 0);
+        assert_eq!(json["children"], 0);
     }
 }

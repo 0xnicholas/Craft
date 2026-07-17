@@ -32,7 +32,7 @@ pub use hot_reload::{
     ComponentChange, HotReloadResult, HotReloader, SceneDiff, apply_scene_diff, compute_scene_diff,
     hot_reload_scene, reload_from_path,
 };
-pub use lint::{LintCode, LintSeverity, LintWarning, lint};
+pub use lint::{LintCode, LintSeverity, LintWarning, explain_node, lint};
 pub use project::{PathsSection, Project, ProjectSection, ResolvedProject};
 pub use render::{ComponentView, NullRenderer, Render, RenderCapabilities, Viewport};
 pub use resource::{Resource, ResourceId, ResourceRef, ResourceRegistry};
