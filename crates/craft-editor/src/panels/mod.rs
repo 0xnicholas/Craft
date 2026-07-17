@@ -134,11 +134,13 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             }
             PanelAction::AgentSendMessage(text) => {
                 if state.agent_rx.is_some() {
-                    state.panels.agent_panel.messages.push(
-                        crate::state::AgentMessage::System {
+                    state
+                        .panels
+                        .agent_panel
+                        .messages
+                        .push(crate::state::AgentMessage::System {
                             text: "Already processing a request".into(),
-                        },
-                    );
+                        });
                     return;
                 }
                 if let Some(ref client) = state.agent_client {

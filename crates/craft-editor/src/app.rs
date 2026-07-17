@@ -3,13 +3,13 @@ use std::time::Instant;
 
 use egui_dock::{DockState, TabViewer};
 
+use crate::agent::SYSTEM_PROMPT;
 use crate::io::recent;
 use crate::panels::{
     AgentPanel, BehaviorEditorPanel, FileBrowserPanel, InspectorPanel, LuaEditorPanel, Panel,
     PanelAction, SceneTreePanel, TerminalPreviewPanel,
 };
 use crate::persist;
-use crate::agent::SYSTEM_PROMPT;
 use crate::state::{EditorState, FileChangeKind, FileChangePending, ProjectState};
 use crate::watcher::{Watcher, WatcherEvent};
 

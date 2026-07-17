@@ -126,7 +126,8 @@ impl Backend for LiveBackend {
             "max_tokens": 2000
         });
 
-        let response = match self.http
+        let response = match self
+            .http
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -291,7 +292,10 @@ impl BenchmarkSpec {
                 n.id, n.type_name, n.components
             ));
             if !n.behaviors.is_empty() {
-                out.push_str(&format!("  behaviors: {}\n", serde_json::to_string(&n.behaviors).unwrap_or_default()));
+                out.push_str(&format!(
+                    "  behaviors: {}\n",
+                    serde_json::to_string(&n.behaviors).unwrap_or_default()
+                ));
             }
         }
         if !self.expected_components.is_empty() {
