@@ -102,7 +102,13 @@ fn main() -> ExitCode {
         }
     };
 
-    let backend = backend_from_name(&cli.backend_name, &cli.api_key, &cli.api_base, &cli.model);
+    // Fall back to env var if --api-key not provided
+    let api_key = if cli.api_key.is_empty() {
+        std::env::var("DEEPSEEK_API_KEY").unwrap_or_default()
+    } else {
+        cli.api_key.clone()
+    };
+    let backend = backend_from_name(&cli.backend_name, &api_key, &cli.api_base, &cli.model);
     let mut registry = NodeRegistry::new();
     registry.instantiate_all();
 

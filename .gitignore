@@ -19,3 +19,4 @@ _references/
 node_modules/
 .worktrees/
 .superpowers/
+.env
