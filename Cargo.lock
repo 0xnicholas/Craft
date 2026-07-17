@@ -843,6 +843,7 @@ version = "0.1.0"
 dependencies = [
  "craft-kernel",
  "craft-replay",
+ "reqwest",
  "serde",
  "serde_json",
 ]

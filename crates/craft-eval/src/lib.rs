@@ -89,6 +89,75 @@ impl Backend for StubBackend {
     }
 }
 
+pub struct LiveBackend {
+    pub http: reqwest::blocking::Client,
+    pub api_base: String,
+    pub api_key: String,
+    pub model: String,
+}
+
+impl LiveBackend {
+    pub fn new(api_base: String, api_key: String, model: String) -> Self {
+        Self {
+            http: reqwest::blocking::Client::new(),
+            api_base,
+            api_key,
+            model,
+        }
+    }
+}
+
+impl Backend for LiveBackend {
+    fn name(&self) -> &str {
+        "live"
+    }
+
+    fn complete(&self, prompt: &str) -> String {
+        let url = format!("{}/chat/completions", self.api_base.trim_end_matches('/'));
+        let system = "You are a game engine evaluator. Given a scene description and expected outcome, output ONLY a JSON array of action arrays — one array per tick. Each action is a JSON object with kind, target, key, and value/by fields. Output ONLY the JSON array, no explanation.";
+
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0,
+            "max_tokens": 2000
+        });
+
+        let response = match self.http
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+        {
+            Ok(r) => r,
+            Err(e) => return format!("HTTP error: {e}"),
+        };
+
+        if !response.status().is_success() {
+            return format!("HTTP {}", response.status().as_u16());
+        }
+
+        let text = match response.text() {
+            Ok(t) => t,
+            Err(e) => return format!("read error: {e}"),
+        };
+
+        let parsed: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => return format!("parse error: {e}"),
+        };
+
+        parsed["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("[]")
+            .to_string()
+    }
+}
+
 pub fn build_node_registry_with(extra: &[Box<dyn craft_kernel::scene::NodeDef>]) -> NodeRegistry {
     let _ = extra;
     NodeRegistry::new()
@@ -211,22 +280,27 @@ pub fn run_benchmark(
 impl BenchmarkSpec {
     pub fn prompt(&self) -> String {
         let mut out = String::new();
-        out.push_str(&format!("# Benchmark: {}\n", self.name));
+        out.push_str("Given the following Craft scene, predict the exact sequence of actions that will execute per tick to achieve the expected final component values.\n\n");
+        out.push_str(&format!("## Scene: {}\n", self.name));
         out.push_str(&format!("{}\n", self.description));
-        out.push_str(&format!("ticks: {}\n", self.ticks));
-        out.push_str("scene.nodes:\n");
+        out.push_str(&format!("Ticks to run: {}\n\n", self.ticks));
+        out.push_str("### Nodes:\n");
         for n in &self.scene.nodes {
             out.push_str(&format!(
                 "- id={} type={} components={:?}\n",
                 n.id, n.type_name, n.components
             ));
+            if !n.behaviors.is_empty() {
+                out.push_str(&format!("  behaviors: {}\n", serde_json::to_string(&n.behaviors).unwrap_or_default()));
+            }
         }
         if !self.expected_components.is_empty() {
-            out.push_str("expected final components:\n");
+            out.push_str("\n### Expected final components:\n");
             for (node_id, comps) in &self.expected_components {
                 out.push_str(&format!("  {node_id}: {comps:?}\n"));
             }
         }
+        out.push_str("\nReturn ONLY a JSON array of action arrays (one per tick). Example: [[{\"kind\":\"move\",\"target\":{\"kind\":\"self\"},\"key\":\"count\",\"by\":1}], ...]");
         out
     }
 }

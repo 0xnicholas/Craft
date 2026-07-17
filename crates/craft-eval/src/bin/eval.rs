@@ -9,6 +9,9 @@ struct CliArgs {
     benchmark: Option<PathBuf>,
     dir: Option<PathBuf>,
     backend_name: String,
+    api_key: String,
+    api_base: String,
+    model: String,
 }
 
 fn parse_args() -> Result<CliArgs, String> {
@@ -17,6 +20,9 @@ fn parse_args() -> Result<CliArgs, String> {
         benchmark: None,
         dir: None,
         backend_name: "stub".to_string(),
+        api_key: String::new(),
+        api_base: "https://api.deepseek.com/v1".to_string(),
+        model: "deepseek-chat".to_string(),
     };
     let mut i = 0;
     while i < args.len() {
@@ -37,6 +43,21 @@ fn parse_args() -> Result<CliArgs, String> {
                 let v = args.get(i).ok_or("missing value for --backend")?.clone();
                 cli.backend_name = v;
             }
+            "--api-key" => {
+                i += 1;
+                let v = args.get(i).ok_or("missing value for --api-key")?.clone();
+                cli.api_key = v;
+            }
+            "--api-base" => {
+                i += 1;
+                let v = args.get(i).ok_or("missing value for --api-base")?.clone();
+                cli.api_base = v;
+            }
+            "--model" => {
+                i += 1;
+                let v = args.get(i).ok_or("missing value for --model")?.clone();
+                cli.model = v;
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -52,14 +73,22 @@ fn print_help() {
     println!("craft-eval — agent benchmark runner");
     println!("  --benchmark <file.json>   run one benchmark");
     println!("  --dir <dir>                run all benchmarks/*.json in dir");
-    println!("  --backend <name>           stub (default)");
+    println!("  --backend <name>           stub | live (default: stub)");
+    println!("  --api-key <key>            API key for live backend");
+    println!("  --api-base <url>           API base URL (default: https://api.deepseek.com/v1)");
+    println!("  --model <name>             model name (default: deepseek-chat)");
     println!("  --help                     this help");
 }
 
-fn backend_from_name(name: &str) -> Box<dyn Backend> {
+fn backend_from_name(name: &str, api_key: &str, api_base: &str, model: &str) -> Box<dyn Backend> {
     match name {
         "stub" => Box::new(StubBackend::deterministic(BTreeMap::new())),
-        _ => panic!("unknown backend {name}; only `stub` is compiled in this build"),
+        "live" => Box::new(craft_eval::LiveBackend::new(
+            api_base.to_string(),
+            api_key.to_string(),
+            model.to_string(),
+        )),
+        _ => panic!("unknown backend {name}; use `stub` or `live`"),
     }
 }
 
@@ -73,7 +102,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let backend = backend_from_name(&cli.backend_name);
+    let backend = backend_from_name(&cli.backend_name, &cli.api_key, &cli.api_base, &cli.model);
     let mut registry = NodeRegistry::new();
     registry.instantiate_all();
 
