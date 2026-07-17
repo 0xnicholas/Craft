@@ -16,6 +16,7 @@ pub mod render_helpers;
 pub mod renderer;
 pub mod state;
 pub mod theme;
+pub mod undo;
 pub mod watcher;
 
 pub fn run(args: Vec<String>) -> eframe::Result<()> {
