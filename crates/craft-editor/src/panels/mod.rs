@@ -2,9 +2,8 @@ use std::path::PathBuf;
 
 use egui::Ui;
 
+use crate::agent::SYSTEM_PROMPT;
 use crate::state::{DockKind, EditorError, EditorState};
-
-const SYSTEM_PROMPT: &str = "You are Craft's AI copilot. You help users build game scenes by inspecting the scene, analyzing issues, and proposing structured changes. Use tools to gather information. When proposing changes, respond with a JSON object containing 'reply' (your explanation) and 'diffs' (an array of SceneDiff objects). Do not read files outside the project. Do not modify files directly — all changes must be reviewed by the human.";
 
 #[derive(Debug, Clone)]
 pub enum PanelAction {
@@ -134,6 +133,14 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
                 }
             }
             PanelAction::AgentSendMessage(text) => {
+                if state.agent_rx.is_some() {
+                    state.panels.agent_panel.messages.push(
+                        crate::state::AgentMessage::System {
+                            text: "Already processing a request".into(),
+                        },
+                    );
+                    return;
+                }
                 if let Some(ref client) = state.agent_client {
                     let context = crate::agent::context::ContextBuilder::build_from_state(state);
                     let context_msg =

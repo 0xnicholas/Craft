@@ -9,9 +9,8 @@ use crate::panels::{
     PanelAction, SceneTreePanel, TerminalPreviewPanel,
 };
 use crate::persist;
+use crate::agent::SYSTEM_PROMPT;
 use crate::state::{EditorState, FileChangeKind, FileChangePending, ProjectState};
-
-const SYSTEM_PROMPT: &str = "You are Craft's AI copilot. You help users build game scenes by inspecting the scene, analyzing issues, and proposing structured changes. Use tools to gather information. When proposing changes, respond with a JSON object containing 'reply' (your explanation) and 'diffs' (an array of SceneDiff objects). Do not read files outside the project. Do not modify files directly — all changes must be reviewed by the human.";
 use crate::watcher::{Watcher, WatcherEvent};
 
 pub struct EditorApp {
