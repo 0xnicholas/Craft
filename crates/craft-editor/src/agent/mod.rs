@@ -6,4 +6,5 @@ pub mod types;
 
 pub use client::{AgentClient, LiveLlmBackend};
 pub use config::AgentConfig;
+pub use context::{AgentContext, ChangeRecord, ContextBuilder, NodeSummary};
 pub use types::{AgentError, AgentStreamEvent, ChatMessage, ToolCall, ToolDef};
