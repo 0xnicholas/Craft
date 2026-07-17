@@ -4,6 +4,8 @@ use egui::Ui;
 
 use crate::state::{DockKind, EditorError, EditorState};
 
+const SYSTEM_PROMPT: &str = "You are Craft's AI copilot. You help users build game scenes by inspecting the scene, analyzing issues, and proposing structured changes. Use tools to gather information. When proposing changes, respond with a JSON object containing 'reply' (your explanation) and 'diffs' (an array of SceneDiff objects). Do not read files outside the project. Do not modify files directly — all changes must be reviewed by the human.";
+
 #[derive(Debug, Clone)]
 pub enum PanelAction {
     OpenScene(PathBuf),
@@ -66,8 +68,39 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             PanelAction::OpenLuaFile(path) => {
                 crate::panels::lua_editor::open_file(state, path);
             }
-            PanelAction::AgentSendMessage(_text) => {
-                // Handled by EditorApp in Phase 7
+            PanelAction::AgentSendMessage(text) => {
+                if let Some(ref client) = state.agent_client {
+                    let context = crate::agent::context::ContextBuilder::build_from_state(state);
+                    let context_msg =
+                        crate::agent::context::ContextBuilder::build_system_message(&context);
+                    let tools = state.agent_tool_registry.all_defs();
+
+                    let messages = vec![
+                        crate::agent::ChatMessage {
+                            role: "system".into(),
+                            content: SYSTEM_PROMPT.into(),
+                            tool_calls: None,
+                            tool_call_id: None,
+                        },
+                        context_msg,
+                        crate::agent::ChatMessage {
+                            role: "user".into(),
+                            content: text,
+                            tool_calls: None,
+                            tool_call_id: None,
+                        },
+                    ];
+
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    state.agent_rx = Some(rx);
+                    state.panels.agent_panel.is_streaming = true;
+                    state.panels.agent_panel.streaming_text.clear();
+                    state.panels.agent_panel.tool_round = 0;
+
+                    if let Some(handle) = client.chat(messages, &tools, false, tx) {
+                        state.agent_handle = Some(handle);
+                    }
+                }
             }
         }
     }

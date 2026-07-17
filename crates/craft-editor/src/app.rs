@@ -10,6 +10,8 @@ use crate::panels::{
 };
 use crate::persist;
 use crate::state::{EditorState, FileChangeKind, FileChangePending, ProjectState};
+
+const SYSTEM_PROMPT: &str = "You are Craft's AI copilot. You help users build game scenes by inspecting the scene, analyzing issues, and proposing structured changes. Use tools to gather information. When proposing changes, respond with a JSON object containing 'reply' (your explanation) and 'diffs' (an array of SceneDiff objects). Do not read files outside the project. Do not modify files directly — all changes must be reviewed by the human.";
 use crate::watcher::{Watcher, WatcherEvent};
 
 pub struct EditorApp {
@@ -149,6 +151,122 @@ impl eframe::App for EditorApp {
         };
         self.dock = dock;
         crate::panels::dispatch(pending_from_panels, &mut self.state);
+
+        // Drain agent stream events
+        if self.state.agent_rx.is_some() {
+            let rx = self.state.agent_rx.take().unwrap();
+            let panel = &mut self.state.panels.agent_panel;
+            let mut tool_loop_needed = false;
+            let mut tool_loop_messages: Vec<crate::agent::ChatMessage> = vec![];
+            let mut tool_loop_tools: Vec<crate::agent::ToolDef> = vec![];
+
+            while let Ok(event) = rx.try_recv() {
+                match event {
+                    crate::agent::AgentStreamEvent::Token(t) => {
+                        panel.streaming_text.push_str(&t);
+                    }
+                    crate::agent::AgentStreamEvent::Done {
+                        full_text,
+                        tool_calls,
+                    } => {
+                        if !tool_calls.is_empty() && panel.tool_round < 3 {
+                            panel.messages.push(crate::state::AgentMessage::Agent {
+                                text: full_text,
+                                suggestions: vec![],
+                            });
+
+                            if let Some(ref scene_state) = self.state.scene {
+                                let mut loop_msgs = vec![crate::agent::ChatMessage {
+                                    role: "system".into(),
+                                    content: SYSTEM_PROMPT.into(),
+                                    tool_calls: None,
+                                    tool_call_id: None,
+                                }];
+
+                                for tc in &tool_calls {
+                                    let args: serde_json::Value =
+                                        serde_json::from_str(&tc.function.arguments)
+                                            .unwrap_or_default();
+                                    let result = self.state.agent_tool_registry.execute(
+                                        &tc.function.name,
+                                        &args,
+                                        &scene_state.def,
+                                        self.state.engine.engine.node_registry_mut(),
+                                    );
+                                    let result_text =
+                                        result.unwrap_or_else(|e| format!("Error: {e}"));
+                                    loop_msgs.push(crate::agent::ChatMessage {
+                                        role: "tool".into(),
+                                        content: result_text,
+                                        tool_calls: None,
+                                        tool_call_id: Some(tc.id.clone()),
+                                    });
+                                }
+
+                                panel.tool_round += 1;
+                                tool_loop_needed = true;
+                                tool_loop_messages = loop_msgs;
+                                tool_loop_tools = self.state.agent_tool_registry.all_defs();
+                            }
+                        } else {
+                            panel.is_streaming = false;
+                            panel.tool_round = 0;
+
+                            let parsed: serde_json::Value = serde_json::from_str(&full_text)
+                                .unwrap_or(serde_json::json!({"reply": full_text}));
+                            let reply = parsed["reply"].as_str().unwrap_or(&full_text).to_string();
+                            let diffs: Vec<crate::state::AgentSuggestion> = parsed["diffs"]
+                                .as_array()
+                                .map(|arr| {
+                                    arr.iter()
+                                        .enumerate()
+                                        .map(|(i, d)| crate::state::AgentSuggestion {
+                                            id: format!(
+                                                "suggestion-{}",
+                                                panel.suggestion_counter + i as u32 + 1
+                                            ),
+                                            description: d["description"]
+                                                .as_str()
+                                                .unwrap_or("")
+                                                .into(),
+                                            diff: serde_json::from_value(d["diff"].clone())
+                                                .unwrap_or_default(),
+                                            status: crate::state::SuggestionStatus::Pending,
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            panel.suggestion_counter += diffs.len() as u32;
+                            panel.messages.push(crate::state::AgentMessage::Agent {
+                                text: reply,
+                                suggestions: diffs,
+                            });
+                            self.state.agent_handle = None;
+                        }
+                    }
+                    crate::agent::AgentStreamEvent::Error(e) => {
+                        panel.is_streaming = false;
+                        panel.tool_round = 0;
+                        panel.messages.push(crate::state::AgentMessage::System {
+                            text: format!("Error: {e}"),
+                        });
+                        self.state.agent_handle = None;
+                    }
+                }
+            }
+
+            if tool_loop_needed {
+                if let Some(ref client) = self.state.agent_client {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    self.state.agent_rx = Some(rx);
+                    panel.is_streaming = true;
+                    panel.streaming_text.clear();
+                    if let Some(h) = client.chat(tool_loop_messages, &tool_loop_tools, true, tx) {
+                        self.state.agent_handle = Some(h);
+                    }
+                }
+            }
+        }
 
         if let Some(pending) = self.state.ui.file_change_pending.clone() {
             egui::TopBottomPanel::bottom("file_change_prompt").show(ctx, |ui| {
