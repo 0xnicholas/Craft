@@ -18,3 +18,4 @@ _references/
 .pi-subagents/
 node_modules/
 .worktrees/
+.superpowers/
