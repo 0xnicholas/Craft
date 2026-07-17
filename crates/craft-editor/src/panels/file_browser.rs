@@ -40,6 +40,7 @@ fn draw_dir(
     filter_lower: &str,
     actions: &mut Vec<PanelAction>,
     depth: usize,
+    state: &mut EditorState,
 ) {
     let entries: Vec<std::fs::DirEntry> = match std::fs::read_dir(dir) {
         Ok(it) => it.filter_map(|e| e.ok()).collect(),
@@ -79,6 +80,21 @@ fn draw_dir(
                     _ => {}
                 }
             }
+            if resp.secondary_clicked() {
+                state.panels.file_browser.context_menu = Some((
+                    path.clone(),
+                    false,
+                    resp.hover_pos().unwrap_or(egui::pos2(0.0, 0.0)),
+                ));
+            }
+            if matches!(kind, FileKind::Lua) && resp.drag_started() {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new("drag_lua_path"),
+                        path.to_string_lossy().to_string(),
+                    );
+                });
+            }
         });
     }
 
@@ -89,9 +105,16 @@ fn draw_dir(
             let indent = depth as f32 * 12.0;
             ui.horizontal(|ui| {
                 ui.add_space(indent);
-                ui.label(format!("[{name}]"));
+                let resp = ui.label(format!("[{name}]"));
+                if resp.secondary_clicked() {
+                    state.panels.file_browser.context_menu = Some((
+                        path.clone(),
+                        true,
+                        resp.hover_pos().unwrap_or(egui::pos2(0.0, 0.0)),
+                    ));
+                }
             });
-            draw_dir(ui, &path, filter_lower, actions, depth + 1);
+            draw_dir(ui, &path, filter_lower, actions, depth + 1, state);
         }
     }
 }
@@ -106,16 +129,59 @@ impl Panel for FileBrowserPanel {
     fn show(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> Vec<PanelAction> {
         ui.text_edit_singleline(&mut state.panels.file_browser.filter);
 
-        let Some(project) = &state.project else {
-            ui.vertical_centered(|ui| ui.label("Open a project"));
-            return Vec::new();
+        let project_root = match &state.project {
+            Some(p) => p.root.clone(),
+            None => {
+                ui.vertical_centered(|ui| ui.label("Open a project"));
+                return Vec::new();
+            }
         };
 
         let filter_lower = state.panels.file_browser.filter.to_lowercase();
         let mut actions = Vec::new();
         egui::ScrollArea::vertical().show(ui, |ui| {
-            draw_dir(ui, &project.root, &filter_lower, &mut actions, 0);
+            draw_dir(ui, &project_root, &filter_lower, &mut actions, 0, state);
         });
+
+        if let Some((ref path, is_dir, pos)) = state.panels.file_browser.context_menu.take() {
+            let path = path.clone();
+            egui::Area::new("file_context_menu".into())
+                .fixed_pos(pos)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style().as_ref()).show(ui, |ui| {
+                        if is_dir {
+                            if ui.button("New File").clicked() {
+                                actions.push(PanelAction::NewFile(path.clone(), "untitled".into()));
+                            }
+                            if ui.button("New Folder").clicked() {
+                                actions.push(PanelAction::NewFolder(path.clone()));
+                            }
+                            if ui.button("Delete").clicked() {
+                                actions.push(PanelAction::DeleteFile(path.clone()));
+                            }
+                        } else {
+                            if ui.button("Open").clicked() {
+                                match classify(&path) {
+                                    FileKind::Scene => {
+                                        actions.push(PanelAction::OpenScene(path.clone()))
+                                    }
+                                    FileKind::Lua => {
+                                        actions.push(PanelAction::OpenLuaFile(path.clone()))
+                                    }
+                                    FileKind::Behavior => {
+                                        actions.push(PanelAction::OpenBehaviorFile(path.clone()))
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if ui.button("Delete").clicked() {
+                                actions.push(PanelAction::DeleteFile(path.clone()));
+                            }
+                        }
+                    });
+                });
+        }
+
         actions
     }
 }
