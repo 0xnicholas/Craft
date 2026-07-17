@@ -23,6 +23,7 @@ pub struct EditorState {
     pub agent_tool_registry: crate::agent::tools::ToolRegistry,
     pub agent_rx: Option<std::sync::mpsc::Receiver<crate::agent::AgentStreamEvent>>,
     pub agent_handle: Option<std::thread::JoinHandle<()>>,
+    pub undo_redo: crate::undo::UndoRedo,
 }
 
 impl Default for EditorState {
@@ -42,6 +43,7 @@ impl Default for EditorState {
             agent_tool_registry: crate::agent::tools::ToolRegistry::new(),
             agent_rx: None,
             agent_handle: None,
+            undo_redo: crate::undo::UndoRedo::new(100),
         }
     }
 }

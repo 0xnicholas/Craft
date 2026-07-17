@@ -83,6 +83,8 @@ impl eframe::App for EditorApp {
             return;
         }
 
+        let mut do_undo = false;
+        let mut do_redo = false;
         ctx.input(|i| {
             if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
                 let unapplied = self
@@ -108,7 +110,30 @@ impl eframe::App for EditorApp {
             if i.key_pressed(egui::Key::F10) {
                 self.pending_actions.push(PanelAction::StepTick);
             }
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::Z) {
+                if i.modifiers.shift {
+                    do_redo = true;
+                } else {
+                    do_undo = true;
+                }
+            }
         });
+        if do_undo {
+            let mut ur = std::mem::replace(
+                &mut self.state.undo_redo,
+                crate::undo::UndoRedo::new(100),
+            );
+            ur.undo(&mut self.state);
+            self.state.undo_redo = ur;
+        }
+        if do_redo {
+            let mut ur = std::mem::replace(
+                &mut self.state.undo_redo,
+                crate::undo::UndoRedo::new(100),
+            );
+            ur.redo(&mut self.state);
+            self.state.undo_redo = ur;
+        }
 
         if let Some(w) = &self.watcher {
             for ev in w.drain_debounced() {

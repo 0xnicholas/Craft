@@ -50,6 +50,10 @@ impl Panel for AgentPanel {
                                             if ui.button("Accept").clicked() {
                                                 let diff = s.diff.clone();
                                                 let is_running = state.engine.is_running;
+                                                let old_scene_def = state
+                                                    .scene
+                                                    .as_ref()
+                                                    .map(|s| s.def.clone());
                                                 if let Some(ref mut scene_state) = state.scene {
                                                     if is_running {
                                                         let mut cloned = scene_state.def.clone();
@@ -81,6 +85,27 @@ impl Panel for AgentPanel {
                                                                     );
                                                                     s.status =
                                                                         SuggestionStatus::Accepted;
+                                                                    if let Some(old_def) =
+                                                                        old_scene_def.clone()
+                                                                    {
+                                                                        state.undo_redo.begin_action("apply agent suggestion");
+                                                                        let old = old_def;
+                                                                        state.undo_redo.add_undo(
+                                                                            move |s| {
+                                                                                if let Some(
+                                                                                    ref mut scene_state,
+                                                                                ) = s.scene
+                                                                                {
+                                                                                    scene_state
+                                                                                        .def = old
+                                                                                        .clone();
+                                                                                }
+                                                                            },
+                                                                        );
+                                                                        state
+                                                                            .undo_redo
+                                                                            .commit_action();
+                                                                    }
                                                                 } else {
                                                                     s.status =
                                                                         SuggestionStatus::Failed {
@@ -120,6 +145,26 @@ impl Panel for AgentPanel {
                                                                 );
                                                                 s.status =
                                                                     SuggestionStatus::Accepted;
+                                                                if let Some(old_def) =
+                                                                    old_scene_def.clone()
+                                                                {
+                                                                    state.undo_redo.begin_action("apply agent suggestion");
+                                                                    let old = old_def;
+                                                                    state.undo_redo.add_undo(
+                                                                        move |s| {
+                                                                            if let Some(
+                                                                                ref mut scene_state,
+                                                                            ) = s.scene
+                                                                            {
+                                                                                scene_state.def =
+                                                                                    old.clone();
+                                                                            }
+                                                                        },
+                                                                    );
+                                                                    state
+                                                                        .undo_redo
+                                                                        .commit_action();
+                                                                }
                                                             }
                                                             Err(e) => {
                                                                 actions.push(

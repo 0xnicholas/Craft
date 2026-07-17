@@ -46,6 +46,14 @@ impl Panel for InspectorPanel {
 
         let actions_to_dispatch = Vec::new();
 
+        let selected_node_id = scene_state.def.nodes[idx].id.clone();
+        let old_components: std::collections::BTreeMap<String, craft_kernel::ComponentValue> =
+            scene_state.def.nodes[idx]
+                .components
+                .iter()
+                .map(|(k, c)| (k.clone(), c.value.clone()))
+                .collect();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             let node = &mut scene_state.def.nodes[idx];
             ui.heading(format!("{} ({})", node.type_name, node.id));
@@ -248,11 +256,36 @@ impl Panel for InspectorPanel {
 
                 if apply_clicked || cancel_clicked {
                     if apply_clicked {
+                        let old_behavior = node.behaviors[bi].clone();
                         if let Some(edit) = state.panels.inspector.behavior_edits.get_mut(&key) {
                             if let Some(parsed) = edit.parsed.take() {
+                                state.undo_redo.begin_action("edit behavior");
+                                let nid = node_id.clone();
+                                let old = old_behavior.clone();
+                                let new = parsed.clone();
+                                state.undo_redo.add_undo(move |s| {
+                                    if let Some(scene) = &mut s.scene {
+                                        if let Some(n) =
+                                            scene.def.nodes.iter_mut().find(|n| n.id == nid)
+                                        {
+                                            n.behaviors[bi] = old.clone();
+                                        }
+                                    }
+                                });
+                                let nid2 = node_id.clone();
+                                state.undo_redo.add_do(move |s| {
+                                    if let Some(scene) = &mut s.scene {
+                                        if let Some(n) =
+                                            scene.def.nodes.iter_mut().find(|n| n.id == nid2)
+                                        {
+                                            n.behaviors[bi] = new.clone();
+                                        }
+                                    }
+                                });
                                 node.behaviors[bi] = parsed;
                                 state.ui.status_message =
                                     format!("applied behavior {node_id}#{bi}");
+                                state.undo_redo.commit_action();
                             }
                         }
                     }
@@ -265,6 +298,55 @@ impl Panel for InspectorPanel {
                 ui.label("(no behaviors)");
             }
         });
+
+        let new_components: std::collections::BTreeMap<String, craft_kernel::ComponentValue> =
+            scene_state.def.nodes[idx]
+                .components
+                .iter()
+                .map(|(k, c)| (k.clone(), c.value.clone()))
+                .collect();
+
+        if old_components != new_components {
+            state.undo_redo.begin_action("change component");
+            let nid = selected_node_id.clone();
+            for (key, new_val) in &new_components {
+                if let Some(old_val) = old_components.get(key) {
+                    if old_val != new_val {
+                        let old_val = old_val.clone();
+                        let new_val = new_val.clone();
+                        let key_undo = key.clone();
+                        let key_redo = key.clone();
+                        let nid_undo = nid.clone();
+                        let nid_redo = nid.clone();
+                        let old_val_clone = old_val.clone();
+                        let new_val_clone = new_val.clone();
+                        state.undo_redo.add_undo(move |s| {
+                            if let Some(scene) = &mut s.scene {
+                                if let Some(n) =
+                                    scene.def.nodes.iter_mut().find(|n| n.id == nid_undo)
+                                {
+                                    if let Some(c) = n.components.get_mut(&key_undo) {
+                                        c.value = old_val_clone.clone();
+                                    }
+                                }
+                            }
+                        });
+                        state.undo_redo.add_do(move |s| {
+                            if let Some(scene) = &mut s.scene {
+                                if let Some(n) =
+                                    scene.def.nodes.iter_mut().find(|n| n.id == nid_redo)
+                                {
+                                    if let Some(c) = n.components.get_mut(&key_redo) {
+                                        c.value = new_val_clone.clone();
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            state.undo_redo.commit_action();
+        }
 
         actions_to_dispatch
     }

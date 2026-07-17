@@ -65,12 +65,26 @@ impl Panel for BehaviorEditorPanel {
             .clicked()
         {
             if let Some(path) = &state.standalone_behavior.path {
-                if let Err(e) = std::fs::write(path, &state.standalone_behavior.buffer) {
+                let old_content = std::fs::read_to_string(path).unwrap_or_default();
+                let new_content = state.standalone_behavior.buffer.clone();
+                state.undo_redo.begin_action("edit behavior file");
+                let path_clone = path.clone();
+                let old_clone = old_content.clone();
+                state.undo_redo.add_undo(move |_s| {
+                    let _ = std::fs::write(&path_clone, &old_clone);
+                });
+                let path_clone2 = path.clone();
+                let new_clone = new_content.clone();
+                state.undo_redo.add_do(move |_s| {
+                    let _ = std::fs::write(&path_clone2, &new_clone);
+                });
+                if let Err(e) = std::fs::write(path, &new_content) {
                     state.ui.status_message = format!("write failed: {e}");
                 } else {
                     state.standalone_behavior.dirty = false;
                     state.ui.status_message = format!("wrote {}", path.display());
                 }
+                state.undo_redo.commit_action();
             }
         }
 
