@@ -66,8 +66,6 @@ pub fn node_type_color(type_name: &str) -> Color32 {
         Color32::from_rgb(108, 159, 255)
     } else if lower.starts_with("player") {
         Color32::from_rgb(15, 155, 88)
-    } else if lower.starts_with("resource") {
-        Color32::from_rgb(160, 160, 160)
     } else {
         Color32::from_rgb(160, 160, 160)
     }
@@ -96,6 +94,9 @@ mod tests {
     #[test]
     fn projectile_gets_yellow() {
         assert_eq!(node_type_icon("enemy_projectile"), "🟡");
-        assert_eq!(node_type_color("enemy_projectile"), Color32::from_rgb(255, 215, 0));
+        assert_eq!(
+            node_type_color("enemy_projectile"),
+            Color32::from_rgb(255, 215, 0)
+        );
     }
 }
