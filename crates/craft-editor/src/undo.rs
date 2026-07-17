@@ -1,5 +1,7 @@
 use crate::state::EditorState;
 
+type StateOp = Box<dyn Fn(&mut EditorState)>;
+
 pub struct UndoRedo {
     actions: Vec<Action>,
     current: i32,
@@ -9,8 +11,8 @@ pub struct UndoRedo {
 struct Action {
     #[allow(dead_code)]
     name: String,
-    do_ops: Vec<Box<dyn Fn(&mut EditorState)>>,
-    undo_ops: Vec<Box<dyn Fn(&mut EditorState)>>,
+    do_ops: Vec<StateOp>,
+    undo_ops: Vec<StateOp>,
 }
 
 impl UndoRedo {

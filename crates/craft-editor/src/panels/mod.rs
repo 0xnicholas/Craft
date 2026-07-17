@@ -20,6 +20,7 @@ pub enum PanelAction {
     OpenBehaviorFile(PathBuf),
     OpenLuaFile(PathBuf),
     AgentSendMessage(String),
+    AddChildNode,
 }
 
 pub trait Panel {
@@ -67,6 +68,53 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             }
             PanelAction::OpenLuaFile(path) => {
                 crate::panels::lua_editor::open_file(state, path);
+            }
+            PanelAction::AddChildNode => {
+                if let Some(ref mut scene_state) = state.scene {
+                    if let Some(ref parent_id) = state.panels.scene_tree.selected_node {
+                        let parent_id = parent_id.clone();
+                        let new_id = format!("__editor_{}", scene_state.def.spawn_counter);
+                        scene_state.def.spawn_counter += 1;
+                        let node = craft_kernel::Node {
+                            id: new_id.clone(),
+                            type_name: "Node".to_string(),
+                            parent: Some(parent_id.clone()),
+                            components: std::collections::BTreeMap::new(),
+                            behaviors: Vec::new(),
+                            active_state: None,
+                            lua_class: None,
+                            destroyed: false,
+                        };
+                        state.undo_redo.begin_action("add child node");
+                        let nid = new_id.clone();
+                        state.undo_redo.add_undo(move |s| {
+                            if let Some(ref mut ss) = s.scene {
+                                ss.def.nodes.retain(|n| n.id != nid);
+                            }
+                        });
+                        let nid2 = new_id.clone();
+                        let pid = parent_id.clone();
+                        state.undo_redo.add_do(move |s| {
+                            if let Some(ref mut ss) = s.scene {
+                                if !ss.def.nodes.iter().any(|n| n.id == nid2) {
+                                    ss.def.nodes.push(craft_kernel::Node {
+                                        id: nid2.clone(),
+                                        type_name: "Node".to_string(),
+                                        parent: Some(pid.clone()),
+                                        components: std::collections::BTreeMap::new(),
+                                        behaviors: Vec::new(),
+                                        active_state: None,
+                                        lua_class: None,
+                                        destroyed: false,
+                                    });
+                                }
+                            }
+                        });
+                        scene_state.def.nodes.push(node);
+                        state.ui.status_message = format!("added child node {new_id}");
+                        state.undo_redo.commit_action();
+                    }
+                }
             }
             PanelAction::AgentSendMessage(text) => {
                 if let Some(ref client) = state.agent_client {

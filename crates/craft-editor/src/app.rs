@@ -85,6 +85,7 @@ impl eframe::App for EditorApp {
 
         let mut do_undo = false;
         let mut do_redo = false;
+        let mut focus_tab_title: Option<String> = None;
         ctx.input(|i| {
             if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
                 let unapplied = self
@@ -117,20 +118,43 @@ impl eframe::App for EditorApp {
                     do_undo = true;
                 }
             }
+            let num_keys = [
+                egui::Key::Num1,
+                egui::Key::Num2,
+                egui::Key::Num3,
+                egui::Key::Num4,
+                egui::Key::Num5,
+            ];
+            for panel_num in 1..=5 {
+                if i.modifiers.ctrl && i.key_pressed(num_keys[panel_num - 1]) {
+                    let titles: &[&str] = &[
+                        "Scene Tree",
+                        "Inspector",
+                        "Files",
+                        "Terminal Preview",
+                        "Agent Copilot",
+                    ];
+                    focus_tab_title = Some(titles[panel_num - 1].to_string());
+                }
+            }
+            if i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::A) {
+                self.pending_actions.push(PanelAction::AddChildNode);
+            }
         });
+        if let Some(title) = focus_tab_title {
+            if let Some((si, ni, _)) = self.dock.find_tab(&title) {
+                self.dock.set_focused_node_and_surface((si, ni));
+            }
+        }
         if do_undo {
-            let mut ur = std::mem::replace(
-                &mut self.state.undo_redo,
-                crate::undo::UndoRedo::new(100),
-            );
+            let mut ur =
+                std::mem::replace(&mut self.state.undo_redo, crate::undo::UndoRedo::new(100));
             ur.undo(&mut self.state);
             self.state.undo_redo = ur;
         }
         if do_redo {
-            let mut ur = std::mem::replace(
-                &mut self.state.undo_redo,
-                crate::undo::UndoRedo::new(100),
-            );
+            let mut ur =
+                std::mem::replace(&mut self.state.undo_redo, crate::undo::UndoRedo::new(100));
             ur.redo(&mut self.state);
             self.state.undo_redo = ur;
         }
