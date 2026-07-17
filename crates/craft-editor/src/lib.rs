@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+pub mod agent;
 pub mod app;
 pub mod engine;
 pub mod error;
