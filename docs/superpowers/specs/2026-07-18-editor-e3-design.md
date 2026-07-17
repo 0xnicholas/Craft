@@ -76,23 +76,21 @@ api_key_env = "CRAFT_LLM_API_KEY"
 
 ```rust
 pub struct AgentClient {
+    inner: Arc<AgentClientInner>,
+}
+
+struct AgentClientInner {
     http: reqwest::blocking::Client,
-    config: AgentConfig,
+    config: AgentConfig,       // 已解析的 key、base URL、model
+    request_in_flight: AtomicBool,
 }
 
 impl AgentClient {
     pub fn new(config: AgentConfig) -> Self;
-
-    /// 发送 chat completion 请求，spawn 后台线程。
-    /// 返回接收端 — 调用方每帧 drain。
-    pub fn chat(
-        &self,
-        messages: Vec<ChatMessage>,
-        tools: Vec<ToolDef>,
-        system_prompt: String,
-    ) -> Result<mpsc::Receiver<AgentStreamEvent>, AgentError>;
 }
 ```
+
+`AgentConfig` 存储已解析的值（从 `api_key_env` 读出的实际 key 字符串），而非环境变量名。
 
 ### 2.3 流式协议
 
@@ -116,20 +114,33 @@ pub enum AgentStreamEvent {
 UI 帧循环                           后台 std::thread
     │                                    │
     ├── client.chat(messages, tools) ──→ │
-    │                                    ├── reqwest POST /v1/chat/completions
-    │                                    │   stream=true
-    │                                    ├── 每个 SSE chunk:
-    │  ←── rx.try_recv() ──────────────→│     Token(delta) → channel
-    │  ←── rx.try_recv() ──────────────→│     Done(...) → channel
-    │  ←── rx.try_recv() ──────────────→│     关闭 channel
+    │                                    ├── reqwest POST (stream: false)
+    │                                    │   等待完整响应
+    │  ←── rx.try_recv() ───────────────│     Done { full_text, tool_calls }
+    │                                    │     关闭 channel，线程退出
+    │                                    │
+    │ (回到 UI 线程)                      │
+    │ 若 tool_calls 非空:                │
+    │   本地执行 tool (lint, dry_run...)  │
+    │   追加 assistant + tool 消息        │
+    │   client.chat(...) ───────────────→│ (新线程)
+    │   ...重复直到无 tool call...        │
+    │                                    │
+    │   client.chat(messages, tools) ──→ │
+    │                                    ├── reqwest POST (stream: true)
+    │                                    │   最终响应，流式返回文本
+    │  ←── Token(delta) ─────────────────│
+    │  ←── Token(delta) ─────────────────│
+    │  ←── Done { full_text } ───────────│
     │                                    │
 ```
 
 关键规则：
-- 使用 `reqwest::blocking::Client` spawn 在 `std::thread` 内 — 不引入 async/await 到编辑器
-- 线程在 `Done` 或 `Error` 事件后关闭 channel 并退出
-- 同一时间最多一个活跃请求（发送按钮在 `is_streaming` 时禁用，后台用 `Arc<AtomicBool>` 保护）
-- SSE 格式: v1 目标为 OpenAI 兼容 API（包括 Ollama/LM Studio）。解析 `data: {"choices":[{"delta":{"content":"..."}}]}\n\n` 行。Anthropic 原生格式推迟到后续版本。
+- Tool 检测阶段: `stream: false`，等完整响应后在 UI 线程执行 tool
+- 最终文本阶段: `stream: true`，逐 token 推送
+- `reqwest::blocking::Client` 是 `Send`，可以安全地传入 `Arc` 给线程
+- `AgentClient` 内部用 `Arc<AgentClientInner>` 持有 http client 和 config
+- 同一时间最多一个活跃请求（`Arc<AtomicBool>` 保护）
 
 ---
 
@@ -202,31 +213,45 @@ Engine schema version: 1.0
 - `SceneDiff` JSON 可能很大 — 作为 tool 结果回传给 LLM 浪费 token
 - 编辑器从响应体中解析 `diffs` 数组直接展示
 
-### 4.2 Tool 调用流程
+### 4.2 Tool 调用流程（两阶段）
+
+**阶段 1: Tool 检测（非流式）**
 
 ```
 Agent 发送请求 (system prompt + tools + context + user message)
+  stream: false
      │
      ▼
-LLM 响应:
-  选项 A: 返回文本 (无 tool call) → Done { full_text, tool_calls: [] }
-  选项 B: 返回 tool_call
+LLM 完整响应:
+  有 tool_calls → 在 UI 线程本地执行 → 追加 assistant + tool 消息
      │
      ▼
-编辑器本地执行 tool:
-  lint → lint(scene) → "3 warnings: ..."
-  dry_run → evaluate_dry_run(...) → "component changes: ..."
-  explain → NodeSummary → 结构化文本
-     │
-     ▼
-编辑器追加 assistant(tool_call) + tool(result) 消息，
-再次调用 LLM (继续同一对话)
-     │
-     ▼
-LLM 返回最终文本 + diffs → Done { full_text, ... }
+  重复阶段 1 (最多 3 轮 tool call)
+  无 tool_calls → 进入阶段 2
 ```
 
-实现为后台线程内的循环：最多 3 次 tool call 往返。第 3 轮后若 LLM 再次请求 tool，编辑器发送 system message "Maximum tool rounds reached. Provide your final answer." 并做最后一轮无 tool 调用。若最终响应仍含 tool call，将已有部分结果及其余原始文本显示给用户。
+**阶段 2: 流式文本生成**
+
+```
+Agent 发送同一对话 (含 tool 结果)
+  stream: true
+     │
+     ▼
+LLM 流式响应:
+  Token(delta) × N → Done { full_text }
+     │
+     ▼
+编辑器解析 full_text 中的 { reply, diffs }
+```
+
+tool 执行在 UI 线程进行，因为引擎类型（Engine, Scene, NodeRegistry）不是 Send/Sync。每轮 tool 检测后，AgentPanel 的 `show()` 方法 drain 响应、执行 tool、然后发起下一轮请求（如需要）。
+
+若第 3 轮 tool call 后仍返回 tool_calls，编辑器追加 system message "Maximum tool rounds reached. Provide your final answer." 并进入阶段 2。
+
+**tool 结果格式**: 工具返回的 JSON 被格式化为字符串放入 tool result 消息中。
+- `lint` → `"3 warnings: unreachable state 'idle' in node 'tower'..."`
+- `dry_run` → `"component changes: tower.cooldown Updated(10→5)..."`
+- `explain_node` → `{"id":"tower_1","type":"Tower",...}` (紧凑 JSON)
 
 ### 4.3 `explain_node` Engine 方法 (新增)
 
@@ -278,9 +303,10 @@ Pending ──→ Accepted  (diff 已应用)
 ### 5.3 Accept
 
 **预览运行中**:
-1. 将 `diff` 序列化为 JSON 文件写入
-2. 调用 `engine.apply_hot_reload(&diff_scene)` 热加载
-3. 状态消息: "Hot-reloaded: tower_1 cooldown 10→5"
+1. 先尝试 `engine.apply_hot_reload(&diff_scene)` 验证 diff 合法
+2. 成功后将 diff 场景序列化为 JSON 写入磁盘
+3. 失败时清理临时场景，状态变为 `Failed`，不写入文件
+4. 状态消息: "Hot-reloaded: tower_1 cooldown 10→5"
 
 **预览停止 / 编辑中**:
 1. `apply_scene_diff(&mut scene.def, &engine.node_registry(), &suggestion.diff)` (已有)
