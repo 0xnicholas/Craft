@@ -782,8 +782,8 @@ mod tests {
 
     #[test]
     fn explain_node_returns_structured_json() {
-        use crate::scene::{Node, Scene};
         use crate::scene::{Component, ComponentValue};
+        use crate::scene::{Node, Scene};
         use std::collections::BTreeMap;
 
         let node = Node {

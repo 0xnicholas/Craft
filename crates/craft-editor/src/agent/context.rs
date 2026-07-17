@@ -89,7 +89,10 @@ impl ContextBuilder {
                 "Selected node: {} ({})\n",
                 node.id, node.type_name
             ));
-            content.push_str(&format!("  Components: {}\n", node.component_keys.join(", ")));
+            content.push_str(&format!(
+                "  Components: {}\n",
+                node.component_keys.join(", ")
+            ));
             if node.behavior_count > 0 {
                 content.push_str(&format!("  Behaviors: {}\n", node.behavior_count));
             }
