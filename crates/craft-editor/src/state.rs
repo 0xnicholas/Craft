@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use craft_kernel::Scene;
+use craft_kernel::hot_reload::SceneDiff;
 
 use crate::engine::EditorEngine;
 pub use crate::error::EditorError;
@@ -117,7 +118,7 @@ pub struct PanelsState {
     pub terminal_preview: TerminalPreviewState,
     pub behavior_editor: BehaviorEditorStub,
     pub lua_editor: LuaEditorStub,
-    pub agent_panel: AgentPanelStub,
+    pub agent_panel: AgentPanelState,
 }
 
 impl Default for PanelsState {
@@ -133,7 +134,7 @@ impl Default for PanelsState {
             terminal_preview: TerminalPreviewState::default(),
             behavior_editor: BehaviorEditorStub,
             lua_editor: LuaEditorStub,
-            agent_panel: AgentPanelStub,
+            agent_panel: AgentPanelState::default(),
         }
     }
 }
@@ -166,11 +167,48 @@ pub struct TerminalPreviewState {
 }
 
 #[derive(Default)]
+pub struct AgentPanelState {
+    pub messages: Vec<AgentMessage>,
+    pub input: String,
+    pub is_streaming: bool,
+    pub streaming_text: String,
+    pub suggestion_counter: u32,
+    pub diff_preview: Option<usize>,
+    pub tool_round: u32,
+}
+
+pub enum AgentMessage {
+    User {
+        text: String,
+    },
+    Agent {
+        text: String,
+        suggestions: Vec<AgentSuggestion>,
+    },
+    System {
+        text: String,
+    },
+}
+
+pub struct AgentSuggestion {
+    pub id: String,
+    pub description: String,
+    pub diff: SceneDiff,
+    pub status: SuggestionStatus,
+}
+
+#[derive(Clone, Debug)]
+pub enum SuggestionStatus {
+    Pending,
+    Accepted,
+    Rejected,
+    Failed { reason: String },
+}
+
+#[derive(Default)]
 pub struct BehaviorEditorStub;
 #[derive(Default)]
 pub struct LuaEditorStub;
-#[derive(Default)]
-pub struct AgentPanelStub;
 
 #[derive(Default)]
 pub struct LspManager;

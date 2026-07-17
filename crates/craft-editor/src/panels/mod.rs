@@ -17,6 +17,7 @@ pub enum PanelAction {
     RequestQuit,
     OpenBehaviorFile(PathBuf),
     OpenLuaFile(PathBuf),
+    AgentSendMessage(String),
 }
 
 pub trait Panel {
@@ -64,6 +65,9 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             }
             PanelAction::OpenLuaFile(path) => {
                 crate::panels::lua_editor::open_file(state, path);
+            }
+            PanelAction::AgentSendMessage(_text) => {
+                // Handled by EditorApp in Phase 7
             }
         }
     }
