@@ -107,9 +107,15 @@ fn dirty_flag_flips_after_component_edit() {
     let new_value = match original {
         craft_kernel::ComponentValue::Int(v) => craft_kernel::ComponentValue::Int(v + 1),
         craft_kernel::ComponentValue::Float(v) => craft_kernel::ComponentValue::Float(v + 1.0),
-        craft_kernel::ComponentValue::Vec2([x, y]) => craft_kernel::ComponentValue::Vec2([x + 1.0, y]),
-        craft_kernel::ComponentValue::Vec3([r, g, b]) => craft_kernel::ComponentValue::Vec3([r + 1.0, g, b]),
-        craft_kernel::ComponentValue::Rect([x, y, w, h]) => craft_kernel::ComponentValue::Rect([x + 1.0, y, w, h]),
+        craft_kernel::ComponentValue::Vec2([x, y]) => {
+            craft_kernel::ComponentValue::Vec2([x + 1.0, y])
+        }
+        craft_kernel::ComponentValue::Vec3([r, g, b]) => {
+            craft_kernel::ComponentValue::Vec3([r + 1.0, g, b])
+        }
+        craft_kernel::ComponentValue::Rect([x, y, w, h]) => {
+            craft_kernel::ComponentValue::Rect([x + 1.0, y, w, h])
+        }
         other => other,
     };
     node.components.get_mut(&key).unwrap().value = new_value;

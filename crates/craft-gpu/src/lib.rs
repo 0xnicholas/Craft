@@ -247,9 +247,26 @@ impl Render for GpuRenderer {
             .collect();
         commands.sort_by_key(|c| c.z_index);
 
-        let instances: Vec<InstanceData> = commands
+        let mut instances: Vec<InstanceData> = commands
             .iter()
             .map(|cmd| {
+                let mut src_rect = cmd.src_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+                // Normalize texel coordinates to UV if needed.
+                // If src_rect components are > 1.0, treat as texels and divide by texture size.
+                if src_rect[2] > 1.0 || src_rect[3] > 1.0 {
+                    if let Some(tex) = self.texture_cache.get(&cmd.texture_id) {
+                        let tw = tex.size[0] as f32;
+                        let th = tex.size[1] as f32;
+                        if tw > 0.0 && th > 0.0 {
+                            src_rect = [
+                                src_rect[0] / tw,
+                                src_rect[1] / th,
+                                src_rect[2] / tw,
+                                src_rect[3] / th,
+                            ];
+                        }
+                    }
+                }
                 let transform = glam::Mat4::from_scale_rotation_translation(
                     glam::Vec3::new(cmd.scale[0], cmd.scale[1], 1.0),
                     glam::Quat::from_rotation_z(cmd.rotation),
@@ -257,14 +274,18 @@ impl Render for GpuRenderer {
                 );
                 InstanceData {
                     transform: transform.to_cols_array_2d(),
-                    src_rect: cmd.src_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]),
+                    src_rect,
                     modulate: cmd.modulate,
                 }
             })
             .collect();
 
-        if instances.is_empty() {
-            return;
+        if instances.len() > 1024 {
+            log::warn!(
+                "too many sprites ({}), truncating to 1024; increase instance buffer size",
+                instances.len()
+            );
+            instances.truncate(1024);
         }
 
         self.queue
@@ -299,8 +320,8 @@ impl Render for GpuRenderer {
             // Pre-create bind groups for each texture batch
             let batch_bind_groups: Vec<(Vec<usize>, wgpu::BindGroup)> = batches
                 .iter()
-                .map(|(tid, indices)| {
-                    let tex = self.texture_cache.get(tid);
+                .filter_map(|(tid, indices)| {
+                    self.texture_cache.get(tid).map(|tex| {
                     let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("texture bind group"),
                         layout: &self.texture_bind_group_layout,
@@ -316,6 +337,7 @@ impl Render for GpuRenderer {
                         ],
                     });
                     (indices.clone(), bg)
+                    })
                 })
                 .collect();
 
