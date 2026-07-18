@@ -658,6 +658,8 @@ pub fn component_value_to_json(v: &ComponentValue) -> Value {
             .unwrap_or(Value::Null),
         ComponentValue::String(s) => Value::String(s.clone()),
         ComponentValue::Vec2([x, y]) => json!([*x, *y]),
+        ComponentValue::Vec3([r, g, b]) => json!([*r, *g, *b]),
+        ComponentValue::Rect([x, y, w, h]) => json!([*x, *y, *w, *h]),
     }
 }
 

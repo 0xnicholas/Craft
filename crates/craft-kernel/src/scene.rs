@@ -18,6 +18,8 @@ pub enum ComponentValue {
     Float(f64),
     String(String),
     Vec2([f64; 2]),
+    Vec3([f64; 3]),
+    Rect([f64; 4]),
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -576,6 +578,8 @@ fn component_value_matches(value: &ComponentValue, ty: ComponentType) -> bool {
             | (ComponentValue::Float(_), ComponentType::Float)
             | (ComponentValue::String(_), ComponentType::String)
             | (ComponentValue::Vec2(_), ComponentType::Vec2)
+            | (ComponentValue::Vec3(_), ComponentType::Vec3)
+            | (ComponentValue::Rect(_), ComponentType::Rect)
     )
 }
 
@@ -595,6 +599,8 @@ pub enum ComponentType {
     Float,
     String,
     Vec2,
+    Vec3,
+    Rect,
 }
 
 impl std::fmt::Display for ComponentType {
@@ -606,6 +612,8 @@ impl std::fmt::Display for ComponentType {
             Self::Float => "float",
             Self::String => "string",
             Self::Vec2 => "vec2",
+            Self::Vec3 => "vec3",
+            Self::Rect => "rect",
         };
         f.write_str(s)
     }

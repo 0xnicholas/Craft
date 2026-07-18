@@ -488,6 +488,8 @@ fn component_type_name(v: &crate::scene::ComponentValue) -> &'static str {
         crate::scene::ComponentValue::Float(_) => "float",
         crate::scene::ComponentValue::String(_) => "string",
         crate::scene::ComponentValue::Vec2(_) => "vec2",
+        crate::scene::ComponentValue::Vec3(_) => "vec3",
+        crate::scene::ComponentValue::Rect(_) => "rect",
     }
 }
 
@@ -499,6 +501,12 @@ fn component_to_json_value(v: &crate::scene::ComponentValue) -> serde_json::Valu
         crate::scene::ComponentValue::Float(f) => serde_json::json!(*f),
         crate::scene::ComponentValue::String(s) => serde_json::Value::String(s.clone()),
         crate::scene::ComponentValue::Vec2(arr) => serde_json::json!({ "x": arr[0], "y": arr[1] }),
+        crate::scene::ComponentValue::Vec3(arr) => {
+            serde_json::json!({ "r": arr[0], "g": arr[1], "b": arr[2] })
+        }
+        crate::scene::ComponentValue::Rect(arr) => {
+            serde_json::json!({ "x": arr[0], "y": arr[1], "w": arr[2], "h": arr[3] })
+        }
     }
 }
 
