@@ -166,6 +166,8 @@ pub fn component_value_to_text(v: &ComponentValue) -> String {
         ComponentValue::Float(f) => format!("{f:.2}"),
         ComponentValue::String(s) => s.clone(),
         ComponentValue::Vec2([x, y]) => format!("({x:.1}, {y:.1})"),
+        ComponentValue::Vec3([r, g, b]) => format!("({r:.1}, {g:.1}, {b:.1})"),
+        ComponentValue::Rect([x, y, w, h]) => format!("[x:{x:.1}, y:{y:.1}, w:{w:.1}, h:{h:.1}]"),
     }
 }
 
@@ -178,6 +180,8 @@ fn _exhaustive_match(v: &ComponentValue) -> &'static str {
         ComponentValue::Float(_) => "float",
         ComponentValue::String(_) => "string",
         ComponentValue::Vec2(_) => "vec2",
+        ComponentValue::Vec3(_) => "vec3",
+        ComponentValue::Rect(_) => "rect",
     }
 }
 

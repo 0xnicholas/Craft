@@ -47,6 +47,6 @@ mod tests {
         std::fs::write(&target, format!("-- schema-version: OLD\n{original}")).unwrap();
         assert!(regenerate_if_needed(dir.path()).unwrap());
         let after = std::fs::read_to_string(&target).unwrap();
-        assert!(after.contains(&craft_schema::SCHEMA_VERSION));
+        assert!(after.contains(craft_schema::SCHEMA_VERSION));
     }
 }

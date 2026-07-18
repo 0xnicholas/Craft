@@ -982,9 +982,20 @@ pub fn lua_to_component_value(value: LuaValue) -> LuaResult<ComponentValue> {
                 let x: f64 = t.get(1)?;
                 let y: f64 = t.get(2)?;
                 Ok(ComponentValue::Vec2([x, y]))
+            } else if len == 3 {
+                let r: f64 = t.get(1)?;
+                let g: f64 = t.get(2)?;
+                let b: f64 = t.get(3)?;
+                Ok(ComponentValue::Vec3([r, g, b]))
+            } else if len == 4 {
+                let x: f64 = t.get(1)?;
+                let y: f64 = t.get(2)?;
+                let w: f64 = t.get(3)?;
+                let h: f64 = t.get(4)?;
+                Ok(ComponentValue::Rect([x, y, w, h]))
             } else {
                 Err(LuaError::external(format!(
-                    "unsupported table of length {len}; only [x, y] vec2 tables can become component values"
+                    "unsupported table of length {len}; only [x, y], [r, g, b], or [x, y, w, h] tables can become component values"
                 )))
             }
         }
@@ -1006,6 +1017,21 @@ pub fn component_value_to_lua(lua: &Lua, value: &ComponentValue) -> LuaResult<Lu
             let t = lua.create_table()?;
             t.set(1, *x)?;
             t.set(2, *y)?;
+            Ok(LuaValue::Table(t))
+        }
+        ComponentValue::Vec3([r, g, b]) => {
+            let t = lua.create_table()?;
+            t.set(1, *r)?;
+            t.set(2, *g)?;
+            t.set(3, *b)?;
+            Ok(LuaValue::Table(t))
+        }
+        ComponentValue::Rect([x, y, w, h]) => {
+            let t = lua.create_table()?;
+            t.set(1, *x)?;
+            t.set(2, *y)?;
+            t.set(3, *w)?;
+            t.set(4, *h)?;
             Ok(LuaValue::Table(t))
         }
     }

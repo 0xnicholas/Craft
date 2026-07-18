@@ -86,6 +86,17 @@ impl Panel for InspectorPanel {
                                 ui.add(egui::DragValue::new(x));
                                 ui.add(egui::DragValue::new(y));
                             }
+                            ComponentValue::Vec3([r, g, b]) => {
+                                ui.add(egui::DragValue::new(r));
+                                ui.add(egui::DragValue::new(g));
+                                ui.add(egui::DragValue::new(b));
+                            }
+                            ComponentValue::Rect([x, y, w, h]) => {
+                                ui.add(egui::DragValue::new(x));
+                                ui.add(egui::DragValue::new(y));
+                                ui.add(egui::DragValue::new(w));
+                                ui.add(egui::DragValue::new(h));
+                            }
                             ComponentValue::Nil => {
                                 ui.label("nil");
                             }

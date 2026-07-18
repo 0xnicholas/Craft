@@ -1,0 +1,21 @@
+[package]
+name = "craft-gpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craft-kernel = { path = "../craft-kernel" }
+wgpu = "0.20"
+winit = "0.30"
+image = "0.25"
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.28"
+log = "0.4"
+env_logger = "0.11"
+pollster = "0.3"
+
+[[bin]]
+name = "craft-gpu"
+path = "src/main.rs"

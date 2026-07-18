@@ -133,6 +133,8 @@ fn component_type_name(v: &ComponentValue) -> &'static str {
         ComponentValue::Float(_) => "float",
         ComponentValue::String(_) => "string",
         ComponentValue::Vec2(_) => "vec2",
+        ComponentValue::Vec3(_) => "vec3",
+        ComponentValue::Rect(_) => "rect",
     }
 }
 

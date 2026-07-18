@@ -9,6 +9,7 @@ members = [
     "crates/craft-schema",
     "crates/craft-terminal",
     "crates/craft-editor",
+    "crates/craft-gpu",
     "crates/craft-eval",
     "games/tower_defense",
 ]
