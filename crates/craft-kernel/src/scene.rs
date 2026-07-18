@@ -149,21 +149,47 @@ fn json_to_component_value(v: Value) -> Result<ComponentValue, String> {
             }
         }
         Value::String(s) => Ok(ComponentValue::String(s)),
-        Value::Array(a) => {
-            if a.len() != 2 {
-                return Err(format!(
-                    "expected [x, y] for vec2, got array of length {}",
-                    a.len()
-                ));
+        Value::Array(a) => match a.len() {
+            2 => {
+                let x = a[0]
+                    .as_f64()
+                    .ok_or_else(|| format!("vec2[0] must be a number, got {:?}", a[0]))?;
+                let y = a[1]
+                    .as_f64()
+                    .ok_or_else(|| format!("vec2[1] must be a number, got {:?}", a[1]))?;
+                Ok(ComponentValue::Vec2([x, y]))
             }
-            let x = a[0]
-                .as_f64()
-                .ok_or_else(|| format!("vec2[0] must be a number, got {:?}", a[0]))?;
-            let y = a[1]
-                .as_f64()
-                .ok_or_else(|| format!("vec2[1] must be a number, got {:?}", a[1]))?;
-            Ok(ComponentValue::Vec2([x, y]))
-        }
+            3 => {
+                let r = a[0]
+                    .as_f64()
+                    .ok_or_else(|| format!("vec3[0] must be a number, got {:?}", a[0]))?;
+                let g = a[1]
+                    .as_f64()
+                    .ok_or_else(|| format!("vec3[1] must be a number, got {:?}", a[1]))?;
+                let b = a[2]
+                    .as_f64()
+                    .ok_or_else(|| format!("vec3[2] must be a number, got {:?}", a[2]))?;
+                Ok(ComponentValue::Vec3([r, g, b]))
+            }
+            4 => {
+                let x = a[0]
+                    .as_f64()
+                    .ok_or_else(|| format!("rect[0] must be a number, got {:?}", a[0]))?;
+                let y = a[1]
+                    .as_f64()
+                    .ok_or_else(|| format!("rect[1] must be a number, got {:?}", a[1]))?;
+                let w = a[2]
+                    .as_f64()
+                    .ok_or_else(|| format!("rect[2] must be a number, got {:?}", a[2]))?;
+                let h = a[3]
+                    .as_f64()
+                    .ok_or_else(|| format!("rect[3] must be a number, got {:?}", a[3]))?;
+                Ok(ComponentValue::Rect([x, y, w, h]))
+            }
+            other => Err(format!(
+                "expected [x, y] (vec2), [r, g, b] (vec3), or [x, y, w, h] (rect), got array of length {other}"
+            )),
+        },
         Value::Object(_) => Err(
             "nested object is not a valid component value; use {\"type\": ..., \"value\": ...}"
                 .to_string(),
@@ -1058,6 +1084,24 @@ mod tests {
             reloaded.nodes[0].components["health"].kind,
             ComponentKind::Regular
         );
+    }
+
+    #[test]
+    fn parses_vec3_from_3_element_array() {
+        let v = json_to_component_value(json!([1.0, 2.0, 3.0])).unwrap();
+        assert_eq!(v, ComponentValue::Vec3([1.0, 2.0, 3.0]));
+    }
+
+    #[test]
+    fn parses_rect_from_4_element_array() {
+        let v = json_to_component_value(json!([0.0, 64.0, 32.0, 32.0])).unwrap();
+        assert_eq!(v, ComponentValue::Rect([0.0, 64.0, 32.0, 32.0]));
+    }
+
+    #[test]
+    fn rejects_array_of_length_5() {
+        let err = json_to_component_value(json!([1.0, 2.0, 3.0, 4.0, 5.0])).unwrap_err();
+        assert!(err.contains("array of length") || err.contains("length 5"));
     }
 
     fn make_node(id: &str, type_name: &str, components: &[(&str, ComponentValue)]) -> Node {
