@@ -459,6 +459,18 @@ fn reject_unknown_top_level_fields(value: &Value, file: &str, errors: &mut Error
     }
 }
 
+const UNIVERSAL_COMPONENTS: &[&str] = &[
+    "position",
+    "sprite",
+    "sprite_rect",
+    "modulate",
+    "alpha",
+    "scale",
+    "rotation",
+    "z_index",
+    "visible",
+];
+
 fn validate_node(
     node: &Node,
     index: usize,
@@ -491,7 +503,7 @@ fn validate_node(
         .components
         .keys()
         .map(String::as_str)
-        .filter(|k| !known.contains_key(k))
+        .filter(|k| !known.contains_key(k) && !UNIVERSAL_COMPONENTS.contains(k))
         .collect();
     unexpected.sort_unstable();
     for key in unexpected {
@@ -1250,6 +1262,36 @@ mod tests {
         assert_eq!(
             node.get_component_value("hp"),
             Some(&ComponentValue::Int(77))
+        );
+    }
+
+    #[test]
+    fn universal_components_accepted_regardless_of_node_type() {
+        let r = registry();
+        let json = r#"{
+            "kind": "scene",
+            "name": "main",
+            "nodes": [{
+                "id": "p1",
+                "type": "Player",
+                "components": {
+                    "position": [0.0, 0.0],
+                    "health": 100,
+                    "sprite": "player.png",
+                    "modulate": [1.0, 1.0, 1.0],
+                    "z_index": 5
+                }
+            }]
+        }"#;
+        let scene = Scene::parse(json, "scene.json", &r).expect("parse with universal components");
+        let node = &scene.nodes[0];
+        assert_eq!(
+            node.get_component_value("sprite"),
+            Some(&ComponentValue::String("player.png".to_string()))
+        );
+        assert_eq!(
+            node.get_component_value("modulate"),
+            Some(&ComponentValue::Vec3([1.0, 1.0, 1.0]))
         );
     }
 }

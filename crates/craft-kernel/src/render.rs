@@ -117,6 +117,122 @@ pub fn views_for_scene(nodes: &[Node]) -> Vec<ComponentView<'_>> {
     nodes.iter().map(ComponentView::from_node).collect()
 }
 
+#[derive(Debug, Clone)]
+pub struct SpriteDrawCommand {
+    pub texture_id: String,
+    pub src_rect: Option<[f32; 4]>,
+    pub position: [f32; 2],
+    pub scale: [f32; 2],
+    pub rotation: f32,
+    pub modulate: [f32; 4],
+    pub z_index: i32,
+}
+
+impl<'a> ComponentView<'a> {
+    pub fn sprite_draw_command(&self) -> Option<SpriteDrawCommand> {
+        let sprite_path = self.get_string("sprite")?;
+        if !self.get_bool("visible").unwrap_or(true) {
+            return None;
+        }
+        let alpha = self.get_float("alpha").unwrap_or(1.0) as f32;
+        if alpha <= 0.0 {
+            return None;
+        }
+        let position = self.position.map(|(x, y)| [x as f32, y as f32])?;
+        let modulate = self
+            .get_vec3("modulate")
+            .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32, alpha])
+            .unwrap_or([1.0, 1.0, 1.0, alpha]);
+        Some(SpriteDrawCommand {
+            texture_id: sprite_path,
+            src_rect: self
+                .get_rect("sprite_rect")
+                .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
+            position,
+            scale: self
+                .get_vec2("scale")
+                .map(|s| [s[0] as f32, s[1] as f32])
+                .unwrap_or([1.0, 1.0]),
+            rotation: self.get_float("rotation").unwrap_or(0.0) as f32,
+            modulate,
+            z_index: self.get_int("z_index").unwrap_or(0) as i32,
+        })
+    }
+
+    pub fn get_string(&self, key: &str) -> Option<String> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::String(s) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Bool(b) => Some(*b),
+            _ => None,
+        })
+    }
+
+    pub fn get_float(&self, key: &str) -> Option<f64> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Float(f) => Some(*f),
+            ComponentValue::Int(i) => Some(*i as f64),
+            _ => None,
+        })
+    }
+
+    pub fn get_int(&self, key: &str) -> Option<i64> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Int(i) => Some(*i),
+            _ => None,
+        })
+    }
+
+    pub fn get_vec2(&self, key: &str) -> Option<[f64; 2]> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Vec2(v) => Some(*v),
+            _ => None,
+        })
+    }
+
+    pub fn get_vec3(&self, key: &str) -> Option<[f64; 3]> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Vec3(v) => Some(*v),
+            _ => None,
+        })
+    }
+
+    pub fn get_rect(&self, key: &str) -> Option<[f64; 4]> {
+        self.components.get(key).and_then(|c| match &c.value {
+            ComponentValue::Rect(r) => Some(*r),
+            _ => None,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CameraInfo {
+    pub position: (f64, f64),
+    pub zoom: f64,
+    pub follow: Option<String>,
+}
+
+pub fn extract_camera(components: &[ComponentView]) -> Option<CameraInfo> {
+    for view in components {
+        if view.type_name == "Camera2D" {
+            let position = view.position.unwrap_or((0.0, 0.0));
+            let zoom = view.get_float("zoom").unwrap_or(1.0);
+            let follow = view.get_string("follow");
+            return Some(CameraInfo {
+                position,
+                zoom,
+                follow,
+            });
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +318,77 @@ mod tests {
     fn null_renderer_shutdown_is_safe() {
         let mut r = NullRenderer::new();
         r.shutdown();
+    }
+
+    #[test]
+    fn sprite_draw_command_extracts_from_view_with_sprite() {
+        let mut components = BTreeMap::new();
+        components.insert(
+            "sprite".to_string(),
+            Component {
+                value: ComponentValue::String("player.png".to_string()),
+                kind: crate::scene::ComponentKind::Regular,
+            },
+        );
+        let view = ComponentView {
+            node_id: "p1",
+            type_name: "Player",
+            components: &components,
+            position: Some((10.0, 20.0)),
+        };
+        let cmd = view.sprite_draw_command().unwrap();
+        assert_eq!(cmd.texture_id, "player.png");
+        assert_eq!(cmd.position, [10.0, 20.0]);
+    }
+
+    #[test]
+    fn sprite_draw_command_returns_none_without_sprite() {
+        let components = BTreeMap::new();
+        let view = ComponentView {
+            node_id: "p1",
+            type_name: "Player",
+            components: &components,
+            position: Some((0.0, 0.0)),
+        };
+        assert!(view.sprite_draw_command().is_none());
+    }
+
+    #[test]
+    fn sprite_draw_command_skips_invisible() {
+        let mut components = BTreeMap::new();
+        components.insert(
+            "sprite".to_string(),
+            Component {
+                value: ComponentValue::String("p.png".to_string()),
+                kind: crate::scene::ComponentKind::Regular,
+            },
+        );
+        components.insert(
+            "visible".to_string(),
+            Component {
+                value: ComponentValue::Bool(false),
+                kind: crate::scene::ComponentKind::Regular,
+            },
+        );
+        let view = ComponentView {
+            node_id: "p1",
+            type_name: "Player",
+            components: &components,
+            position: Some((0.0, 0.0)),
+        };
+        assert!(view.sprite_draw_command().is_none());
+    }
+
+    #[test]
+    fn extract_camera_finds_camera2d_node() {
+        let components = BTreeMap::new();
+        let views = vec![ComponentView {
+            node_id: "cam",
+            type_name: "Camera2D",
+            components: &components,
+            position: Some((100.0, 200.0)),
+        }];
+        let cam = extract_camera(&views).unwrap();
+        assert_eq!(cam.position, (100.0, 200.0));
     }
 }
