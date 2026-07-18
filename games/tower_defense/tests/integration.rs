@@ -42,7 +42,7 @@ fn scene_loads_with_four_nodes() {
     let scene = load_scene().expect("load scene");
     assert_eq!(scene.kind, "scene");
     assert_eq!(scene.name, "tower_defense");
-    assert_eq!(scene.nodes.len(), 4);
+    assert_eq!(scene.nodes.len(), 5);
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn scene_serializes_to_value_and_back() {
     assert_eq!(v["kind"], "scene");
     assert_eq!(v["name"], "tower_defense");
     let nodes = v["nodes"].as_array().expect("nodes array");
-    assert_eq!(nodes.len(), 4);
+    assert_eq!(nodes.len(), 5);
 }
 
 #[test]

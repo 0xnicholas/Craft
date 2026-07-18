@@ -29,11 +29,19 @@ craft_node!(Enemy, {
     },
 });
 
+craft_node!(Camera2D, {
+    components: {
+        position: Vec2 = [0.0, 0.0],
+        zoom: Float = 1.0,
+    },
+});
+
 pub fn build_node_registry() -> craft_kernel::NodeRegistry {
     let mut r = craft_kernel::NodeRegistry::new();
     r.register::<Spawner>();
     r.register::<Tower>();
     r.register::<Enemy>();
+    r.register::<Camera2D>();
     r
 }
 

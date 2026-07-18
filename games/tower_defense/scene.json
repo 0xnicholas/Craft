@@ -3,13 +3,23 @@
   "name": "tower_defense",
   "nodes": [
     {
+      "id": "main_camera",
+      "type": "Camera2D",
+      "components": {
+        "position": [0, 0],
+        "zoom": 1.0
+      }
+    },
+    {
       "id": "spawner_main",
       "type": "Spawner",
       "components": {
         "cooldown": 0,
         "spawn_interval": 20,
         "spawned_count": 0,
-        "position": [0.0, 0.0]
+        "position": [0.0, 0.0],
+        "sprite": "sprites/spawner.png",
+        "z_index": 1
       },
       "behaviors": [
         {
@@ -65,7 +75,9 @@
         "shots_fired": 0,
         "damage": 5,
         "kills": 0,
-        "position": [10.0, -2.0]
+        "position": [10.0, -2.0],
+        "sprite": "sprites/tower.png",
+        "z_index": 2
       },
       "behaviors": [
         {
@@ -95,7 +107,9 @@
         "shots_fired": 0,
         "damage": 5,
         "kills": 0,
-        "position": [20.0, 1.5]
+        "position": [20.0, 1.5],
+        "sprite": "sprites/tower.png",
+        "z_index": 2
       },
       "behaviors": [
         {
