@@ -64,8 +64,15 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             PanelAction::OpenScene(p) => {
                 let _ = state.open_scene(&p);
             }
-            PanelAction::RunScene => state.engine.is_running = true,
-            PanelAction::StopScene => state.engine.stop(),
+            PanelAction::RunScene => {
+                let _ = state.save_dirty();
+                launch_gpu_subprocess(state);
+                state.engine.is_running = true;
+            }
+            PanelAction::StopScene => {
+                kill_gpu_subprocess(state);
+                state.engine.stop();
+            }
             PanelAction::StepTick => state.engine.step(),
             PanelAction::ReloadScene => {
                 let _ = state.engine.reload();
@@ -389,4 +396,62 @@ fn dispatch_set_lua_class(state: &mut EditorState, node_id: &str, lua_path: &str
         }
     });
     state.undo_redo.commit_action();
+}
+
+fn launch_gpu_subprocess(state: &mut EditorState) {
+    kill_gpu_subprocess(state);
+
+    if let Some(ref scene_state) = state.scene {
+        let scene_path = &scene_state.path;
+        let asset_root = scene_path
+            .parent()
+            .unwrap_or(&std::path::PathBuf::from("."))
+            .join("assets");
+
+        let scene_json = match serde_json::to_string(&scene_state.def) {
+            Ok(j) => j,
+            Err(e) => {
+                state.ui.status_message = format!("serialize error: {e}");
+                return;
+            }
+        };
+        let tmp = std::env::temp_dir().join("craft_scene.json");
+        if let Err(e) = std::fs::write(&tmp, &scene_json) {
+            state.ui.status_message = format!("write temp scene: {e}");
+            return;
+        }
+
+        let exe = std::env::current_exe().unwrap_or_default();
+        let gpu_bin = exe
+            .parent()
+            .unwrap_or(&std::path::PathBuf::from("."))
+            .join(format!("craft-gpu{}", std::env::consts::EXE_SUFFIX));
+
+        match std::process::Command::new(&gpu_bin)
+            .arg(&tmp)
+            .arg("--asset-root")
+            .arg(&asset_root)
+            .spawn()
+        {
+            Ok(child) => {
+                state.ui.status_message = "GPU game window launched".into();
+                state.game_child = Some(child);
+            }
+            Err(e) => {
+                state.ui.status_message = format!(
+                    "failed to launch GPU window: {e}. Dev: cargo run -p craft-gpu -- {} --asset-root {}",
+                    tmp.display(),
+                    asset_root.display()
+                );
+            }
+        }
+    }
+}
+
+fn kill_gpu_subprocess(state: &mut EditorState) {
+    if let Some(mut child) = state.game_child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+        state.ui.status_message = "GPU game window closed".into();
+    }
 }

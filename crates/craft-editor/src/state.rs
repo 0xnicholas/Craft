@@ -24,6 +24,7 @@ pub struct EditorState {
     pub agent_rx: Option<std::sync::mpsc::Receiver<crate::agent::AgentStreamEvent>>,
     pub agent_handle: Option<std::thread::JoinHandle<()>>,
     pub undo_redo: crate::undo::UndoRedo,
+    pub game_child: Option<std::process::Child>,
 }
 
 impl Default for EditorState {
@@ -44,6 +45,7 @@ impl Default for EditorState {
             agent_rx: None,
             agent_handle: None,
             undo_redo: crate::undo::UndoRedo::new(100),
+            game_child: None,
         }
     }
 }
