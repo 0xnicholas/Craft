@@ -3,6 +3,30 @@ use std::path::PathBuf;
 use super::{Panel, PanelAction};
 use crate::state::EditorState;
 
+fn check_file_drop(ui: &egui::Ui, actions: &mut Vec<PanelAction>) {
+    if ui.input(|i| i.pointer.any_released()) {
+        if let Some(path) = ui
+            .ctx()
+            .data_mut(|d| d.get_temp::<String>(egui::Id::new("drag_file_path")))
+        {
+            if ui.rect_contains_pointer(ui.max_rect()) {
+                let p = PathBuf::from(&path);
+                let file_str = path;
+                ui.ctx().data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drag_file_path"));
+                });
+                if file_str.ends_with(".behavior.json") {
+                    actions.push(PanelAction::OpenBehaviorFile(p));
+                } else if file_str.ends_with(".lua") {
+                    actions.push(PanelAction::OpenLuaFile(p));
+                } else if file_str.ends_with(".json") {
+                    actions.push(PanelAction::OpenScene(p));
+                }
+            }
+        }
+    }
+}
+
 pub struct LuaEditorPanel;
 
 impl Panel for LuaEditorPanel {
@@ -13,6 +37,8 @@ impl Panel for LuaEditorPanel {
         "Lua Editor"
     }
     fn show(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> Vec<PanelAction> {
+        let mut actions = Vec::new();
+        check_file_drop(ui, &mut actions);
         if let Some(err) = state.engine.lua_runtime_error() {
             ui.colored_label(
                 egui::Color32::RED,
@@ -55,7 +81,7 @@ impl Panel for LuaEditorPanel {
 
         if state.lua_editor.current_path.is_none() {
             ui.vertical_centered(|ui| ui.label("Lua Editor — open a .lua file"));
-            return Vec::new();
+            return actions;
         }
 
         let path_display = state
@@ -202,7 +228,7 @@ impl Panel for LuaEditorPanel {
             save_and_reload(state);
         }
 
-        Vec::new()
+        actions
     }
 }
 

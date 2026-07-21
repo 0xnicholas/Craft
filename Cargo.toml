@@ -11,7 +11,11 @@ members = [
     "crates/craft-editor",
     "crates/craft-gpu",
     "crates/craft-eval",
+    "crates/craft-physics",
+    "crates/craft-particles",
+    "crates/craft-audio",
     "games/tower_defense",
+    "games/dungeon_crawler",
 ]
 
 [workspace.package]

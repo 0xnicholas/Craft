@@ -461,6 +461,9 @@ fn reject_unknown_top_level_fields(value: &Value, file: &str, errors: &mut Error
 
 const UNIVERSAL_COMPONENTS: &[&str] = &[
     "position",
+    "velocity",
+    "hitbox",
+    "hitbox_radius",
     "sprite",
     "sprite_rect",
     "modulate",
@@ -572,7 +575,7 @@ fn suggest_rename(unknown: &str, known: &[&str]) -> Option<String> {
     let mut best: Option<(&str, usize)> = None;
     for name in known {
         let dist = levenshtein(unknown, name);
-        if dist <= 3 && (best.is_none() || dist < best.unwrap().1) {
+        if dist <= 3 && best.is_none_or(|(_, d)| dist < d) {
             best = Some((name, dist));
         }
     }

@@ -15,6 +15,12 @@ pub struct EngineConfig {
     pub tick_hz: u32,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct InputState {
+    pub direction: [f64; 2],
+    pub action: bool,
+}
+
 pub struct Engine {
     pub bus: SignalBus,
     pub resources: ResourceRegistry,
@@ -36,6 +42,7 @@ pub struct Engine {
     /// Optional host-side hook (e.g. craft-lua) that participates in the
     /// tick loop and signal dispatch. See `EngineHook` for the contract.
     pub hook: Option<Box<dyn EngineHook>>,
+    pub input: InputState,
 }
 
 impl std::fmt::Debug for Engine {
@@ -84,6 +91,7 @@ impl Engine {
             renderer: Box::new(NullRenderer::new()),
             render_each_tick: false,
             hook: None,
+            input: InputState::default(),
         }
     }
 
@@ -126,12 +134,47 @@ impl Engine {
         lint(scene, registry)
     }
 
+    pub fn set_input_direction(&mut self, dx: f64, dy: f64) {
+        self.input.direction = [dx, dy];
+    }
+
+    pub fn set_input_action(&mut self, pressed: bool) {
+        self.input.action = pressed;
+    }
+
+    fn populate_input_node(&mut self) {
+        let Some(ref mut scene) = self.scene else {
+            return;
+        };
+        let dir = self.input.direction;
+        let action = self.input.action;
+        if let Some(input_node) = scene.nodes.iter_mut().find(|n| n.id == "__input") {
+            input_node.components.insert(
+                "direction".to_string(),
+                crate::scene::Component {
+                    value: crate::scene::ComponentValue::Vec2(dir),
+                    kind: Default::default(),
+                },
+            );
+            input_node.components.insert(
+                "action".to_string(),
+                crate::scene::Component {
+                    value: crate::scene::ComponentValue::Bool(action),
+                    kind: Default::default(),
+                },
+            );
+        }
+    }
+
     pub fn tick(&mut self) {
+        self.populate_input_node();
         self.bus.deliver_pending();
         for phase in SystemPhase::ALL {
             let mut ctx = SystemContext {
                 bus: &mut self.bus,
                 resources: &self.resources,
+                scene: self.scene.as_mut(),
+                pending_signals: &mut self.pending_signals,
                 tick: self.tick,
             };
             self.systems.run_phase(phase, &mut ctx);
@@ -139,6 +182,7 @@ impl Engine {
         let pending = std::mem::take(&mut self.pending_signals);
         for (sig, args) in pending {
             self.dispatch_signal(&sig, &args);
+            self.bus.emit_by_name(&sig, &args);
         }
         if let Some(mut hook) = self.hook.take() {
             hook.before_behaviors(self);
@@ -228,7 +272,12 @@ impl Engine {
         if let Some(scene) = &mut self.scene {
             let mut all_cmds = Vec::new();
             let snapshot: Vec<Node> = scene.nodes.clone();
+            let target_ids: Vec<&str> = extract_target_ids(args);
+            let targeted = !target_ids.is_empty();
             for node in &snapshot {
+                if targeted && !target_ids.contains(&node.id.as_str()) {
+                    continue;
+                }
                 let mut has_handler = false;
                 for b in &node.behaviors {
                     if let Behavior::OnSignal { signal, .. } = b {
@@ -335,6 +384,19 @@ impl Engine {
             args: Default::default(),
         }
     }
+}
+
+fn extract_target_ids(args: &serde_json::Value) -> Vec<&str> {
+    let mut ids = Vec::new();
+    if let Some(obj) = args.as_object() {
+        if let Some(a) = obj.get("a").and_then(|v| v.as_str()) {
+            ids.push(a);
+        }
+        if let Some(b) = obj.get("b").and_then(|v| v.as_str()) {
+            ids.push(b);
+        }
+    }
+    ids
 }
 
 impl Default for Engine {
@@ -526,5 +588,152 @@ mod tests {
         let reg = NodeRegistry::new();
         let err = evaluate_dry_run(&scene, &reg, "missing", &[]).expect_err("must fail");
         assert!(matches!(err, EngineError::Internal(_)));
+    }
+
+    #[test]
+    fn targeted_signal_only_fires_on_named_nodes() {
+        use crate::behavior::Behavior;
+        use crate::scene::{Component, ComponentKind};
+
+        let mut engine = Engine::new();
+        let node_a = Node {
+            id: "a".to_string(),
+            type_name: "Test".to_string(),
+            parent: None,
+            components: {
+                let mut m = std::collections::BTreeMap::new();
+                m.insert(
+                    "hp".to_string(),
+                    Component {
+                        value: crate::scene::ComponentValue::Int(10),
+                        kind: ComponentKind::Regular,
+                    },
+                );
+                m
+            },
+            behaviors: vec![Behavior::OnSignal {
+                signal: "hit".to_string(),
+                actions: vec![crate::behavior::Action::Move {
+                    target: crate::behavior::Target::This,
+                    key: "hp".to_string(),
+                    by: serde_json::json!(-1),
+                }],
+            }],
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        };
+        let node_b = Node {
+            id: "b".to_string(),
+            type_name: "Test".to_string(),
+            parent: None,
+            components: {
+                let mut m = std::collections::BTreeMap::new();
+                m.insert(
+                    "hp".to_string(),
+                    Component {
+                        value: crate::scene::ComponentValue::Int(20),
+                        kind: ComponentKind::Regular,
+                    },
+                );
+                m
+            },
+            behaviors: vec![Behavior::OnSignal {
+                signal: "hit".to_string(),
+                actions: vec![crate::behavior::Action::Move {
+                    target: crate::behavior::Target::This,
+                    key: "hp".to_string(),
+                    by: serde_json::json!(-1),
+                }],
+            }],
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        };
+        let scene = Scene {
+            kind: "scene".to_string(),
+            name: "t".to_string(),
+            nodes: vec![node_a, node_b],
+            spawn_counter: 0,
+        };
+        engine.load_scene(scene);
+
+        engine.queue_signal(
+            "hit",
+            serde_json::json!({"a": "a", "b": "nonexistent"}),
+        );
+        engine.tick();
+        engine.tick();
+
+        let hp_a = engine
+            .scene()
+            .unwrap()
+            .find_node("a")
+            .and_then(|n| n.components.get("hp"))
+            .map(|c| match &c.value {
+                crate::scene::ComponentValue::Int(i) => *i,
+                _ => 0,
+            })
+            .unwrap();
+        let hp_b = engine
+            .scene()
+            .unwrap()
+            .find_node("b")
+            .and_then(|n| n.components.get("hp"))
+            .map(|c| match &c.value {
+                crate::scene::ComponentValue::Int(i) => *i,
+                _ => 0,
+            })
+            .unwrap();
+
+        assert_eq!(hp_a, 9, "node a was targeted, should lose 1 HP");
+        assert_eq!(hp_b, 20, "node b was NOT targeted, should keep full HP");
+    }
+
+    #[test]
+    fn populate_input_node_updates_existing() {
+        let mut engine = Engine::new();
+        let input_node = Node {
+            id: "__input".to_string(),
+            type_name: "Input".to_string(),
+            parent: None,
+            components: std::collections::BTreeMap::new(),
+            behaviors: vec![],
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        };
+        let scene = Scene {
+            kind: "scene".to_string(),
+            name: "t".to_string(),
+            nodes: vec![input_node],
+            spawn_counter: 0,
+        };
+        engine.load_scene(scene);
+        engine.set_input_direction(1.0, -1.0);
+        engine.set_input_action(true);
+        engine.tick();
+
+        let input_node = engine
+            .scene()
+            .unwrap()
+            .find_node("__input")
+            .expect("Input node created");
+        let dir = input_node.components.get("direction").unwrap();
+        assert_eq!(dir.value, crate::scene::ComponentValue::Vec2([1.0, -1.0]));
+        let action = input_node.components.get("action").unwrap();
+        assert_eq!(action.value, crate::scene::ComponentValue::Bool(true));
+
+        engine.set_input_direction(0.0, 1.0);
+        engine.tick();
+        let dir2 = engine
+            .scene()
+            .unwrap()
+            .find_node("__input")
+            .unwrap()
+            .components
+            .get("direction")
+            .unwrap();
+        assert_eq!(dir2.value, crate::scene::ComponentValue::Vec2([0.0, 1.0]));
     }
 }

@@ -172,20 +172,6 @@ pub fn component_value_to_text(v: &ComponentValue) -> String {
 }
 
 #[allow(dead_code)]
-fn _exhaustive_match(v: &ComponentValue) -> &'static str {
-    match v {
-        ComponentValue::Nil => "nil",
-        ComponentValue::Bool(_) => "bool",
-        ComponentValue::Int(_) => "int",
-        ComponentValue::Float(_) => "float",
-        ComponentValue::String(_) => "string",
-        ComponentValue::Vec2(_) => "vec2",
-        ComponentValue::Vec3(_) => "vec3",
-        ComponentValue::Rect(_) => "rect",
-    }
-}
-
-#[allow(dead_code)]
 fn make_view<'a>(
     id: &'a str,
     type_name: &'a str,

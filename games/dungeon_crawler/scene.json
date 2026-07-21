@@ -1,0 +1,211 @@
+{
+  "kind": "scene",
+  "name": "dungeon_level_1",
+  "nodes": [
+    {
+      "id": "__input",
+      "type": "Input",
+      "components": {
+        "direction": [0, 0],
+        "action": false
+      }
+    },
+    {
+      "id": "player",
+      "type": "Player",
+      "components": {
+        "position": [1, 2],
+        "velocity": [0, 0],
+        "health": 100,
+        "damage": 15,
+        "hitbox": [0.5, 0.5],
+        "move_counter": 0
+      },
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "move_counter", "by": 1 },
+            {
+              "kind": "if",
+              "cond": { "lt": [{ "ref": "self.move_counter" }, 3] },
+              "then": [
+                { "kind": "set_state", "target": "self", "key": "velocity", "value": [1, 0] }
+              ],
+              "else": [
+                { "kind": "set_state", "target": "self", "key": "velocity", "value": [0, 0] },
+                { "kind": "set_state", "target": "self", "key": "move_counter", "value": 0 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "enemy_a",
+      "type": "Enemy",
+      "components": {
+        "position": [1, 4],
+        "velocity": [0, 0],
+        "health": 30,
+        "damage": 5,
+        "hitbox": [0.5, 0.5]
+      },
+      "lua_class": "scripts.enemy",
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            {
+              "kind": "if",
+              "cond": { "lt": [{ "ref": "self.health" }, 1] },
+              "then": [{ "kind": "destroy", "target": "self" }],
+              "else": []
+            }
+          ]
+        },
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "health", "by": -15 },
+            { "kind": "move", "target": "player", "key": "health", "by": -5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "enemy_b",
+      "type": "Enemy",
+      "components": {
+        "position": [7, 1],
+        "velocity": [0, 0],
+        "health": 30,
+        "damage": 5,
+        "hitbox": [0.5, 0.5]
+      },
+      "lua_class": "scripts.enemy",
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            {
+              "kind": "if",
+              "cond": { "lt": [{ "ref": "self.health" }, 1] },
+              "then": [{ "kind": "destroy", "target": "self" }],
+              "else": []
+            }
+          ]
+        },
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "health", "by": -15 },
+            { "kind": "move", "target": "player", "key": "health", "by": -5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "enemy_c",
+      "type": "Enemy",
+      "components": {
+        "position": [7, 4],
+        "velocity": [0, 0],
+        "health": 30,
+        "damage": 5,
+        "hitbox": [0.5, 0.5]
+      },
+      "lua_class": "scripts.enemy",
+      "behaviors": [
+        {
+          "kind": "on_tick",
+          "actions": [
+            {
+              "kind": "if",
+              "cond": { "lt": [{ "ref": "self.health" }, 1] },
+              "then": [{ "kind": "destroy", "target": "self" }],
+              "else": []
+            }
+          ]
+        },
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "move", "target": "self", "key": "health", "by": -15 },
+            { "kind": "move", "target": "player", "key": "health", "by": -5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "potion_a",
+      "type": "HealthPotion",
+      "components": {
+        "position": [3, 1],
+        "heal_amount": 20,
+        "hitbox": [0.3, 0.3]
+      },
+      "behaviors": [
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "move", "target": "player", "key": "health", "by": 20 },
+            { "kind": "destroy", "target": "self" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "potion_b",
+      "type": "HealthPotion",
+      "components": {
+        "position": [5, 4],
+        "heal_amount": 20,
+        "hitbox": [0.3, 0.3]
+      },
+      "behaviors": [
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "move", "target": "player", "key": "health", "by": 20 },
+            { "kind": "destroy", "target": "self" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exit_stairs",
+      "type": "Exit",
+      "components": {
+        "position": [8, 2],
+        "hitbox": [0.5, 0.5]
+      },
+      "behaviors": [
+        {
+          "kind": "on_signal",
+          "signal": "collide",
+          "actions": [
+            { "kind": "emit", "signal": "level_complete", "args": {} }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "w_tl", "type": "Wall", "components": { "position": [0, 0] }
+    },
+    {
+      "id": "w_tr", "type": "Wall", "components": { "position": [9, 0] }
+    },
+    {
+      "id": "w_bl", "type": "Wall", "components": { "position": [0, 5] }
+    },
+    {
+      "id": "w_br", "type": "Wall", "components": { "position": [9, 5] }
+    }
+  ]
+}

@@ -309,11 +309,6 @@ impl BenchmarkSpec {
     }
 }
 
-#[allow(dead_code)]
-fn _component_value_to_json(v: &ComponentValue) -> Value {
-    serde_json::to_value(v).unwrap_or(Value::Null)
-}
-
 pub fn run_all_benchmarks(
     specs: &[BenchmarkSpec],
     registry: &NodeRegistry,

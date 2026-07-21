@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use schemars::JsonSchema;
-use schemars::schema::{Schema, SchemaObject};
+use schemars::schema::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -377,11 +377,6 @@ pub fn typescript_sdk_types() -> &'static str {
     use std::sync::OnceLock;
     static CACHE: OnceLock<String> = OnceLock::new();
     CACHE.get_or_init(generate_typescript_types).as_str()
-}
-
-#[allow(dead_code)]
-fn _unused_check_schema_object(s: &SchemaObject) {
-    let _ = s;
 }
 
 /// Returns the contents of `lua_engine_stub.lua` as a String, prefixed with

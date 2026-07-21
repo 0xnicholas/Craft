@@ -25,6 +25,7 @@ pub enum PanelAction {
     DeleteNode(String),
     ReparentNode(String, String),
     SetLuaClass(String, String),
+    RenameNode(String, String),
     NewFile(PathBuf, String),
     NewFolder(PathBuf),
     DeleteFile(PathBuf),
@@ -103,6 +104,9 @@ pub fn dispatch(actions: Vec<PanelAction>, state: &mut EditorState) {
             }
             PanelAction::SetLuaClass(node_id, lua_path) => {
                 dispatch_set_lua_class(state, &node_id, &lua_path);
+            }
+            PanelAction::RenameNode(node_id, new_name) => {
+                dispatch_rename_node(state, &node_id, &new_name);
             }
             PanelAction::NewFile(parent_dir, name) => {
                 let path = parent_dir.join(&name);
@@ -235,15 +239,47 @@ fn dispatch_add_child_node(state: &mut EditorState, parent_id: &str) {
 }
 
 fn dispatch_delete_node(state: &mut EditorState, node_id: &str) {
-    let Some(ref mut scene_state) = state.scene else {
+    let node_id = node_id.to_string();
+    let snapshot = state
+        .scene
+        .as_ref()
+        .and_then(|s| s.def.nodes.iter().find(|n| n.id == node_id).cloned());
+    let Some(snapshot) = snapshot else {
         return;
     };
-    let node_id = node_id.to_string();
-    if let Some(node) = scene_state.def.nodes.iter_mut().find(|n| n.id == node_id) {
-        node.destroyed = true;
+    {
+        let Some(ref mut scene_state) = state.scene else {
+            return;
+        };
+        if let Some(node) = scene_state.def.nodes.iter_mut().find(|n| n.id == node_id) {
+            node.destroyed = true;
+        }
     }
     purge_destroyed(state);
+
+    state.undo_redo.begin_action("delete node");
+    let nid = node_id.clone();
+    let restore = snapshot;
+    state.undo_redo.add_undo(move |s| {
+        if let Some(ref mut ss) = s.scene {
+            if !ss.def.nodes.iter().any(|n| n.id == nid) {
+                let mut n = restore.clone();
+                n.destroyed = false;
+                ss.def.nodes.push(n);
+            }
+        }
+    });
+    let nid2 = node_id.clone();
+    state.undo_redo.add_do(move |s| {
+        if let Some(ref mut ss) = s.scene {
+            if let Some(n) = ss.def.nodes.iter_mut().find(|n| n.id == nid2) {
+                n.destroyed = true;
+            }
+        }
+        purge_destroyed(s);
+    });
     state.ui.status_message = format!("deleted node {node_id}");
+    state.undo_redo.commit_action();
 }
 
 fn purge_destroyed(state: &mut EditorState) {
@@ -396,6 +432,79 @@ fn dispatch_set_lua_class(state: &mut EditorState, node_id: &str, lua_path: &str
         }
     });
     state.undo_redo.commit_action();
+}
+
+fn dispatch_rename_node(state: &mut EditorState, node_id: &str, new_name: &str) {
+    let new_id = new_name.to_string();
+    {
+        let Some(ref mut scene_state) = state.scene else {
+            return;
+        };
+        let old_id = scene_state
+            .def
+            .nodes
+            .iter()
+            .find(|n| n.id == node_id)
+            .map(|n| n.id.clone());
+        let Some(old_id) = old_id else {
+            return;
+        };
+        if old_id == new_id {
+            return;
+        }
+        if scene_state.def.nodes.iter().any(|n| n.id == new_id) {
+            state.ui.status_message = format!("node id {new_id} already exists");
+            return;
+        }
+        if let Some(node) = scene_state.def.nodes.iter_mut().find(|n| n.id == node_id) {
+            node.id = new_id.clone();
+        }
+        for n in &mut scene_state.def.nodes {
+            if n.parent.as_deref() == Some(old_id.as_str()) {
+                n.parent = Some(new_id.clone());
+            }
+        }
+        if state.panels.scene_tree.selected_node.as_deref() == Some(old_id.as_str()) {
+            state.panels.scene_tree.selected_node = Some(new_id.clone());
+        }
+        state.undo_redo.begin_action("rename node");
+        let oid = old_id.clone();
+        let nid = new_id.clone();
+        state.undo_redo.add_undo(move |s| {
+            if let Some(ref mut ss) = s.scene {
+                if let Some(n) = ss.def.nodes.iter_mut().find(|n| n.id == nid) {
+                    n.id = oid.clone();
+                }
+                for n in &mut ss.def.nodes {
+                    if n.parent.as_deref() == Some(nid.as_str()) {
+                        n.parent = Some(oid.clone());
+                    }
+                }
+            }
+            if s.panels.scene_tree.selected_node.as_deref() == Some(nid.as_str()) {
+                s.panels.scene_tree.selected_node = Some(oid.clone());
+            }
+        });
+        let oid2 = old_id.clone();
+        let nid2 = new_id.clone();
+        state.undo_redo.add_do(move |s| {
+            if let Some(ref mut ss) = s.scene {
+                if let Some(n) = ss.def.nodes.iter_mut().find(|n| n.id == oid2) {
+                    n.id = nid2.clone();
+                }
+                for n in &mut ss.def.nodes {
+                    if n.parent.as_deref() == Some(oid2.as_str()) {
+                        n.parent = Some(nid2.clone());
+                    }
+                }
+            }
+            if s.panels.scene_tree.selected_node.as_deref() == Some(oid2.as_str()) {
+                s.panels.scene_tree.selected_node = Some(nid2.clone());
+            }
+        });
+        state.ui.status_message = format!("renamed {old_id} -> {new_id}");
+        state.undo_redo.commit_action();
+    }
 }
 
 fn launch_gpu_subprocess(state: &mut EditorState) {

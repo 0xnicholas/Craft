@@ -1,0 +1,5 @@
+[project]
+name = "dungeon_crawler"
+entry_scene = "res://games/dungeon_crawler/scene.json"
+seed = 42
+tick_hz = 10

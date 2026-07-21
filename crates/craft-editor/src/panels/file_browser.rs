@@ -87,12 +87,15 @@ fn draw_dir(
                     resp.hover_pos().unwrap_or(egui::pos2(0.0, 0.0)),
                 ));
             }
-            if matches!(kind, FileKind::Lua) && resp.drag_started() {
+            if resp.drag_started() {
+                let path_str = path.to_string_lossy().to_string();
+                if matches!(kind, FileKind::Lua) {
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(egui::Id::new("drag_lua_path"), path_str.clone());
+                    });
+                }
                 ui.ctx().data_mut(|d| {
-                    d.insert_temp(
-                        egui::Id::new("drag_lua_path"),
-                        path.to_string_lossy().to_string(),
-                    );
+                    d.insert_temp(egui::Id::new("drag_file_path"), path_str);
                 });
             }
         });
@@ -145,19 +148,63 @@ impl Panel for FileBrowserPanel {
 
         if let Some((ref path, is_dir, pos)) = state.panels.file_browser.context_menu.take() {
             let path = path.clone();
+            let show_new_types = state
+                .panels
+                .file_browser
+                .new_file_parent
+                .as_ref()
+                == Some(&path);
             egui::Area::new("file_context_menu".into())
                 .fixed_pos(pos)
                 .show(ui.ctx(), |ui| {
                     egui::Frame::popup(ui.style().as_ref()).show(ui, |ui| {
                         if is_dir {
-                            if ui.button("New File").clicked() {
-                                actions.push(PanelAction::NewFile(path.clone(), "untitled".into()));
-                            }
-                            if ui.button("New Folder").clicked() {
-                                actions.push(PanelAction::NewFolder(path.clone()));
-                            }
-                            if ui.button("Delete").clicked() {
-                                actions.push(PanelAction::DeleteFile(path.clone()));
+                            if show_new_types {
+                                ui.label("File type:");
+                                if ui.button("Scene (.json)").clicked() {
+                                    let stub = r#"{"kind": "scene", "name": "", "nodes": []}"#;
+                                    let file_path = path.join("untitled_scene.json");
+                                    let _ = std::fs::write(&file_path, stub);
+                                    actions.push(PanelAction::SetStatus(format!(
+                                        "created {}",
+                                        file_path.display()
+                                    )));
+                                    state.panels.file_browser.new_file_parent = None;
+                                }
+                                if ui.button("Lua (.lua)").clicked() {
+                                    let stub = "local M = {}\nreturn M\n";
+                                    let file_path = path.join("untitled.lua");
+                                    let _ = std::fs::write(&file_path, stub);
+                                    actions.push(PanelAction::SetStatus(format!(
+                                        "created {}",
+                                        file_path.display()
+                                    )));
+                                    state.panels.file_browser.new_file_parent = None;
+                                }
+                                if ui.button("Behavior (.behavior.json)").clicked() {
+                                    let stub = r#"{"kind": "on_tick", "actions": []}"#;
+                                    let file_path = path.join("untitled.behavior.json");
+                                    let _ = std::fs::write(&file_path, stub);
+                                    actions.push(PanelAction::SetStatus(format!(
+                                        "created {}",
+                                        file_path.display()
+                                    )));
+                                    state.panels.file_browser.new_file_parent = None;
+                                }
+                                if ui.button("Back").clicked() {
+                                    state.panels.file_browser.new_file_parent = None;
+                                }
+                            } else {
+                                if ui.button("New File").clicked() {
+                                    state.panels.file_browser.new_file_parent =
+                                        Some(path.clone());
+                                }
+                                if ui.button("New Folder").clicked() {
+                                    actions.push(PanelAction::NewFolder(path.clone()));
+                                }
+                                if ui.button("Delete").clicked() {
+                                    actions.push(PanelAction::DeleteFile(path.clone()));
+                                }
                             }
                         } else {
                             if ui.button("Open").clicked() {

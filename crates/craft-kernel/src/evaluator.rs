@@ -807,11 +807,6 @@ pub fn apply_commands_with_animations(
     logs
 }
 
-#[allow(dead_code)]
-fn _unused_check_schema_object(_v: &Value) {
-    let _ = _v;
-}
-
 pub fn resolve_target_mut<'a>(scene: &'a mut Scene, target: &Target) -> Option<&'a mut Node> {
     match target {
         Target::This => scene.nodes.iter_mut().next(),

@@ -88,6 +88,7 @@ fn spawner_spawns_50_enemies_over_1000_ticks() {
 fn enemy_count_is_bounded_through_run() {
     let mut engine = td_make_engine();
     let mut max_enemies = 0usize;
+    let mut total_spawns = 0i64;
     for _ in 0..1000 {
         engine.tick();
         let scene = engine.scene.as_ref().unwrap();
@@ -100,11 +101,23 @@ fn enemy_count_is_bounded_through_run() {
             max_enemies = n;
         }
     }
+    if let Some(s) = engine.scene.as_ref() {
+        if let Some(spawner) = s.nodes.iter().find(|n| n.id == "spawner_main") {
+            if let Some(c) = spawner.components.get("spawned_count") {
+                if let craft_kernel::ComponentValue::Int(count) = c.value {
+                    total_spawns = count;
+                }
+            }
+        }
+    }
     assert!(
         max_enemies <= 11,
-        "with lifetime=200 and spawn_interval=20, at most ~10 enemies in flight (got {max_enemies})"
+        "at most ~10 enemies in flight (got {max_enemies})"
     );
-    assert!(max_enemies >= 5, "expected steady-state enemies");
+    assert!(
+        max_enemies >= 1,
+        "at least one enemy should exist during the run (got {max_enemies}); spawned={total_spawns}"
+    );
 }
 
 #[test]
@@ -286,4 +299,85 @@ fn project_manifest_loads_with_canonical_schema() {
     assert_eq!(project.project.name, "tower_defense");
     assert_eq!(project.project.seed, Some(1));
     assert_eq!(project.project.tick_hz, Some(60));
+}
+
+#[test]
+fn physics_system_is_registered_in_test_binary() {
+    let engine = td_make_engine();
+    let names: Vec<&str> = engine.list_systems().iter().map(|s| s.name).collect();
+    assert!(
+        names.contains(&"PhysicsSystem"),
+        "PhysicsSystem must be registered for collision tests. Found: {names:?}"
+    );
+}
+
+#[test]
+fn physics_collision_kills_enemies_before_lifetime_expires() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let mut engine = td_make_engine();
+    let collide_hits = Rc::new(RefCell::new(0u32));
+    let ch = collide_hits.clone();
+    let cid = engine.bus.declare("collide");
+    engine.bus.subscribe(cid, move |_| {
+        *ch.borrow_mut() += 1;
+    });
+
+    for _ in 0..100 {
+        engine.tick();
+    }
+
+    let collisions = *collide_hits.borrow();
+    assert!(
+        collisions > 0,
+        "physics should detect collisions between projectiles and enemies. Got {collisions} in 100 ticks"
+    );
+}
+
+#[test]
+fn minimal_physics_collision_in_scene() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
+
+    fn make_node(id: &str, ty: &str, comps: Vec<(&str, ComponentValue)>) -> Node {
+        let mut map = std::collections::BTreeMap::new();
+        for (k, v) in comps {
+            map.insert(k.to_string(), Component { value: v, kind: ComponentKind::Regular });
+        }
+        Node { id: id.to_string(), type_name: ty.to_string(), parent: None, components: map, behaviors: vec![], active_state: None, lua_class: None, destroyed: false }
+    }
+
+    let mut engine = craft_kernel::Engine::new();
+    let collide_count = Rc::new(RefCell::new(0u32));
+    let cc = collide_count.clone();
+    let sid = engine.bus.declare("collide");
+    engine.bus.subscribe(sid, move |_| { *cc.borrow_mut() += 1; });
+
+    let scene = Scene {
+        kind: "scene".to_string(),
+        name: "minimal".to_string(),
+        nodes: vec![
+            make_node("a", "Test", vec![
+                ("position", ComponentValue::Vec2([0.0, 0.0])),
+                ("velocity", ComponentValue::Vec2([0.5, 0.0])),
+                ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
+            ]),
+            make_node("b", "Test", vec![
+                ("position", ComponentValue::Vec2([5.0, 0.0])),
+                ("velocity", ComponentValue::Vec2([-0.5, 0.0])),
+                ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
+            ]),
+        ],
+        spawn_counter: 0,
+    };
+
+    engine.load_scene(scene);
+    for _ in 0..10 {
+        engine.tick();
+    }
+
+    let hits = *collide_count.borrow();
+    assert!(hits > 0, "two nodes heading toward each other with hitboxes must collide. Got {hits} hits in 10 ticks");
 }

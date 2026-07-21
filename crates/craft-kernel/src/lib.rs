@@ -18,7 +18,7 @@ pub use behavior::{
     Action, ActionCommand, Behavior, Expression, LogLevel, ResultTarget, StateDef, Target,
     Transition,
 };
-pub use engine::{Engine, EngineConfig};
+pub use engine::{Engine, EngineConfig, InputState};
 pub use error::{
     AutoFix, EngineError, EngineResult, IoError, IoErrorKind, ParseError, ValidationError,
 };

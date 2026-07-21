@@ -34,6 +34,8 @@ pub struct SystemInfo {
 pub struct SystemContext<'a> {
     pub bus: &'a mut SignalBus,
     pub resources: &'a ResourceRegistry,
+    pub scene: Option<&'a mut crate::scene::Scene>,
+    pub pending_signals: &'a mut Vec<(String, serde_json::Value)>,
     pub tick: u64,
 }
 

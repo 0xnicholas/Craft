@@ -6,7 +6,7 @@
       "id": "main_camera",
       "type": "Camera2D",
       "components": {
-        "position": [0, 0],
+        "position": [15, 0],
         "zoom": 1.0
       }
     },
@@ -17,7 +17,7 @@
         "cooldown": 0,
         "spawn_interval": 20,
         "spawned_count": 0,
-        "position": [0.0, 0.0],
+        "position": [35.0, 0.0],
         "sprite": "sprites/spawner.png",
         "z_index": 1
       },
@@ -37,8 +37,9 @@
                   "components": {
                     "health": 5,
                     "lifetime": 200,
-                    "speed": 0.5,
-                    "position": [0.0, 0.0]
+                    "velocity": [-0.3, 0.0],
+                    "hitbox": [1.0, 1.0],
+                    "position": [35.0, 0.0]
                   },
                   "behaviors": [
                     {
@@ -53,6 +54,14 @@
                           ],
                           "else": []
                         }
+                      ]
+                    },
+                    {
+                      "kind": "on_signal",
+                      "signal": "collide",
+                      "actions": [
+                        { "kind": "destroy", "target": "self" },
+                        { "kind": "emit", "signal": "enemy_killed", "args": { "killed_by": "projectile" } }
                       ]
                     }
                   ]
@@ -88,6 +97,39 @@
               "kind": "if",
               "cond": { "gt": [{ "ref": "self.cooldown" }, 9] },
               "then": [
+                {
+                  "kind": "spawn",
+                  "type": "Projectile",
+                  "parent": "self",
+                  "components": {
+                    "position": [10.0, -2.0],
+                    "velocity": [1.5, 0.0],
+                    "hitbox": [0.5, 0.5],
+                    "damage": 5,
+                    "lifetime": 40
+                  },
+                  "behaviors": [
+                    {
+                      "kind": "on_tick",
+                      "actions": [
+                        { "kind": "move", "target": "self", "key": "lifetime", "by": -1 },
+                        {
+                          "kind": "if",
+                          "cond": { "lt": [{ "ref": "self.lifetime" }, 1] },
+                          "then": [{ "kind": "destroy", "target": "self" }],
+                          "else": []
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "on_signal",
+                      "signal": "collide",
+                      "actions": [
+                        { "kind": "destroy", "target": "self" }
+                      ]
+                    }
+                  ]
+                },
                 { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_a" } },
                 { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
                 { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
@@ -120,6 +162,39 @@
               "kind": "if",
               "cond": { "gt": [{ "ref": "self.cooldown" }, 11] },
               "then": [
+                {
+                  "kind": "spawn",
+                  "type": "Projectile",
+                  "parent": "self",
+                  "components": {
+                    "position": [20.0, 1.5],
+                    "velocity": [1.5, 0.0],
+                    "hitbox": [0.5, 0.5],
+                    "damage": 5,
+                    "lifetime": 40
+                  },
+                  "behaviors": [
+                    {
+                      "kind": "on_tick",
+                      "actions": [
+                        { "kind": "move", "target": "self", "key": "lifetime", "by": -1 },
+                        {
+                          "kind": "if",
+                          "cond": { "lt": [{ "ref": "self.lifetime" }, 1] },
+                          "then": [{ "kind": "destroy", "target": "self" }],
+                          "else": []
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "on_signal",
+                      "signal": "collide",
+                      "actions": [
+                        { "kind": "destroy", "target": "self" }
+                      ]
+                    }
+                  ]
+                },
                 { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_b" } },
                 { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
                 { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }
@@ -150,6 +225,39 @@
               "kind": "if",
               "cond": { "gt": [{ "ref": "self.cooldown" }, 7] },
               "then": [
+                {
+                  "kind": "spawn",
+                  "type": "Projectile",
+                  "parent": "self",
+                  "components": {
+                    "position": [30.0, 0.0],
+                    "velocity": [1.5, 0.0],
+                    "hitbox": [0.5, 0.5],
+                    "damage": 5,
+                    "lifetime": 40
+                  },
+                  "behaviors": [
+                    {
+                      "kind": "on_tick",
+                      "actions": [
+                        { "kind": "move", "target": "self", "key": "lifetime", "by": -1 },
+                        {
+                          "kind": "if",
+                          "cond": { "lt": [{ "ref": "self.lifetime" }, 1] },
+                          "then": [{ "kind": "destroy", "target": "self" }],
+                          "else": []
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "on_signal",
+                      "signal": "collide",
+                      "actions": [
+                        { "kind": "destroy", "target": "self" }
+                      ]
+                    }
+                  ]
+                },
                 { "kind": "emit", "signal": "tower_fire", "args": { "tower": "tower_c" } },
                 { "kind": "move", "target": "self", "key": "shots_fired", "by": 1 },
                 { "kind": "set_state", "target": "self", "key": "cooldown", "value": 0 }

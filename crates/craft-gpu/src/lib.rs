@@ -434,6 +434,8 @@ pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineR
     let tick_duration = Duration::from_secs_f64(1.0 / config.tick_hz as f64);
     let last_tick = std::sync::atomic::AtomicU64::new(Instant::now().elapsed().as_nanos() as u64);
     let window_ref = Arc::clone(&window);
+    let key_state = std::sync::Arc::new(std::sync::Mutex::new((0i8, 0i8, false)));
+    let key_state_ref = key_state.clone();
 
     event_loop
         .run(move |event, target| match event {
@@ -445,9 +447,32 @@ pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineR
                 target.exit();
             }
             Event::WindowEvent {
+                event: WindowEvent::KeyboardInput {
+                    event: key_event, ..
+                },
+                ..
+            } => {
+                use winit::keyboard::{KeyCode, PhysicalKey};
+                let pressed = key_event.state.is_pressed();
+                let mut ks = key_state.lock().unwrap();
+                if let PhysicalKey::Code(code) = key_event.physical_key {
+                    match code {
+                        KeyCode::KeyW | KeyCode::ArrowUp => ks.1 = if pressed { 1 } else { 0 },
+                        KeyCode::KeyS | KeyCode::ArrowDown => ks.1 = if pressed { -1 } else { 0 },
+                        KeyCode::KeyA | KeyCode::ArrowLeft => ks.0 = if pressed { -1 } else { 0 },
+                        KeyCode::KeyD | KeyCode::ArrowRight => ks.0 = if pressed { 1 } else { 0 },
+                        KeyCode::Space => ks.2 = pressed,
+                        _ => {}
+                    }
+                }
+            }
+            Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
+                let (dx, dy, action) = *key_state_ref.lock().unwrap();
+                engine.set_input_direction(dx as f64, dy as f64);
+                engine.set_input_action(action);
                 engine.tick();
                 engine.render_now();
             }

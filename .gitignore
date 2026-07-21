@@ -20,3 +20,8 @@ node_modules/
 .worktrees/
 .superpowers/
 .env
+*.wav
+*.ogg
+*.mp3
+coverage/
+*.profraw

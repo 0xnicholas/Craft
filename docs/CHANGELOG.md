@@ -2,6 +2,57 @@
 
 Per-release notes for Craft. Versions follow the spirit of [Semantic Versioning](https://semver.org/) — major bumps mark architectural shifts (v0 → v1 = engine core shipped; v1 → v2 = editor shipped; etc.), minor bumps mark new milestones.
 
+## [v0.2.0] — 2026-07-19
+
+### GPU Rendering (v3.0-GPU)
+
+- **craft-gpu** crate: wgpu + winit 2D sprite renderer with instanced batching, texture caching, and camera transforms.
+- New `ComponentValue` variants: `Vec3`, `Rect`.
+- Universal component allowlist: `velocity`, `hitbox`, `hitbox_radius` added alongside `position`, `sprite`, `modulate`, etc.
+- `SpriteDrawCommand` extraction from `ComponentView`.
+- `Camera2D` node type with position, zoom, follow.
+- Editor F5 launches GPU game window as subprocess (macOS-safe).
+
+### Editor (v2, E1–E4)
+
+- **E1**: 7-panel egui editor shell: Scene Tree, Inspector, File Browser, Terminal Preview, Behavior Editor, Lua Editor, Agent Copilot. Dock layout persistence. Project manifest parsing. File watcher with hot reload.
+- **E2**: Behavior JSON editor with inline validation. Lua editor with LuaLS LSP support, diagnostics, auto-complete. Engine type stubs generation.
+- **E3**: Agent Copilot panel. LLM chat interface. Context injection (scene, selection, diff). Diff preview + accept/reject flow.
+- **E4**: Undo/redo (command pattern). Keyboard shortcuts (Ctrl+1-5, Ctrl+Shift+A, Ctrl+Z). Context menus (scene tree + file browser). Drag-drop (reparent, Lua attach, file→editor). Dark theme with node type emoji icons.
+
+### Physics (v3.1)
+
+- **craft-physics** crate: `craft_system!(PhysicsSystem, PreTick)`. Velocity integration + AABB/circle collision detection. Collisions emit targeted `collide` signal `{a, b}`.
+- `SystemContext` extended with `scene` and `pending_signals` access.
+- Signal bus API: `emit_by_name`, `pending_signal_names`, `deliver_and_collect`.
+- Signal bridge: bus→JSON handler dispatch. Targeted dispatch: signal payload `{a, b}` filters handlers to only involved nodes.
+
+### Particles (v3.1)
+
+- **craft-particles** crate: `craft_system!(ParticleSystem, PostTick)`. `ParticleEmitter` nodes spawn `Particle` children with radial velocity, lifetime fade, and auto-cleanup.
+
+### Audio (v3.2)
+
+- **craft-audio** crate: `craft_system!(AudioSystem, PostTick)`. Signal-triggered WAV/OGG playback via rodio. Auto-discovers `assets/<signal>.wav` on each signal.
+
+### Games
+
+- **Tower defense** upgraded with physics: enemies, projectiles, hitboxes, collide handlers. Enemies spawn from right, move left toward towers.
+- **Dungeon crawler** (new): turn-based roguelike. Player auto-moves, Lua enemy AI chases, physics collision combat, health potions, exit stairs. 6 integration tests.
+
+### Agent Benchmarks
+
+- 4/4 benchmark tasks passing (stub backend). LLM prompt fix for `[]` return when scene behaviors suffice.
+
+### Documentation
+
+- `AGENT_GUIDE.md`: how LLMs use Craft SDK (nodes, behaviors, actions, expressions, signals, Lua, physics, particles, audio).
+- `SCHEMA.md`: JSON Schema reference for scenes, nodes, components, behaviors, actions, signals, systems.
+
+### Quality
+
+- 15 crates, all tests passing, clippy clean.
+
 ## [v0.1.0] — 2026-07-16
 
 First stable release of the Craft engine. Implements all PRD §12 milestones (M1–M10) and the v1.5 Lua scripting sequence (L1–L3).

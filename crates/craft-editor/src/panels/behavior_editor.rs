@@ -4,6 +4,30 @@ use super::{Panel, PanelAction};
 use crate::json_path::Severity;
 use crate::state::{BehaviorEditorState, EditorState, json_path_lsp};
 
+fn check_file_drop(ui: &egui::Ui, actions: &mut Vec<PanelAction>) {
+    if ui.input(|i| i.pointer.any_released()) {
+        if let Some(path) = ui
+            .ctx()
+            .data_mut(|d| d.get_temp::<String>(egui::Id::new("drag_file_path")))
+        {
+            if ui.rect_contains_pointer(ui.max_rect()) {
+                let p = PathBuf::from(&path);
+                let file_str = path;
+                ui.ctx().data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drag_file_path"));
+                });
+                if file_str.ends_with(".behavior.json") {
+                    actions.push(PanelAction::OpenBehaviorFile(p));
+                } else if file_str.ends_with(".lua") {
+                    actions.push(PanelAction::OpenLuaFile(p));
+                } else if file_str.ends_with(".json") {
+                    actions.push(PanelAction::OpenScene(p));
+                }
+            }
+        }
+    }
+}
+
 pub struct BehaviorEditorPanel;
 
 impl Panel for BehaviorEditorPanel {
@@ -14,9 +38,11 @@ impl Panel for BehaviorEditorPanel {
         "Behavior Editor"
     }
     fn show(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> Vec<PanelAction> {
+        let mut actions = Vec::new();
+        check_file_drop(ui, &mut actions);
         if state.standalone_behavior.path.is_none() {
             ui.vertical_centered(|ui| ui.label("Behavior Editor — open a .behavior.json file"));
-            return Vec::new();
+            return actions;
         }
 
         let path_display = state

@@ -161,6 +161,8 @@ impl Default for PanelsState {
                 expanded_nodes: HashSet::new(),
                 filter_text: String::new(),
                 context_menu: None,
+                rename_target: None,
+                attach_lua_target: None,
             },
             inspector: InspectorState::default(),
             file_browser: FileBrowserState::default(),
@@ -177,6 +179,8 @@ pub struct SceneTreeState {
     pub expanded_nodes: HashSet<String>,
     pub filter_text: String,
     pub context_menu: Option<(String, egui::Pos2)>,
+    pub rename_target: Option<String>,
+    pub attach_lua_target: Option<String>,
 }
 
 #[derive(Default)]
@@ -193,6 +197,7 @@ pub struct FileBrowserState {
     pub entries: BTreeMap<PathBuf, FileEntry>,
     pub filter: String,
     pub context_menu: Option<(PathBuf, bool, egui::Pos2)>,
+    pub new_file_parent: Option<PathBuf>,
 }
 
 impl Default for FileBrowserState {
@@ -202,6 +207,7 @@ impl Default for FileBrowserState {
             entries: BTreeMap::new(),
             filter: String::new(),
             context_menu: None,
+            new_file_parent: None,
         }
     }
 }

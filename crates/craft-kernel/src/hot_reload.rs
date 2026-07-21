@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::behavior::Behavior;
 use crate::error::EngineResult;
@@ -328,9 +327,6 @@ pub fn reload_from_path(
     let new_scene = Scene::load(path, registry)?;
     hot_reload_scene(scene, registry, &new_scene)
 }
-
-#[allow(dead_code)]
-fn _unused(_v: &Value) {}
 
 #[cfg(test)]
 mod tests {

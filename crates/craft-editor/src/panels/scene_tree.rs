@@ -3,6 +3,34 @@ use std::collections::HashSet;
 use super::{Panel, PanelAction};
 use crate::state::EditorState;
 
+fn find_lua_files(root: &Option<std::path::PathBuf>) -> Vec<std::path::PathBuf> {
+    let Some(root) = root else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir()
+                && !path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+            {
+                stack.push(path);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("lua") {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 pub struct SceneTreePanel;
 
 impl SceneTreePanel {
@@ -82,24 +110,40 @@ fn draw_subtree(
         }
     }
 
+    let is_rename = state.panels.scene_tree.rename_target.as_deref() == Some(node.id.as_str());
+
     ui.horizontal(|ui| {
         ui.add_space(indent);
         let icon = crate::theme::node_type_icon(&node.type_name);
-        let label = format!("{icon} [{}] {}", node.type_name, node.id);
-        let response = ui.selectable_label(selected, label);
-        if response.clicked() {
-            state.panels.scene_tree.selected_node = Some(node.id.clone());
-        }
-        if response.secondary_clicked() {
-            state.panels.scene_tree.context_menu = Some((
-                node.id.clone(),
-                response.hover_pos().unwrap_or(egui::pos2(0.0, 0.0)),
-            ));
-        }
-        if response.drag_started() {
-            ui.ctx().data_mut(|d| {
-                d.insert_temp(egui::Id::new("drag_node_id"), node.id.clone());
-            });
+        if is_rename {
+            let mut edit_buf = node.id.clone();
+            let resp = ui.text_edit_singleline(&mut edit_buf);
+            if resp.lost_focus()
+                || ui.input(|i| i.key_pressed(egui::Key::Enter))
+            {
+                if !edit_buf.is_empty() && edit_buf != node.id {
+                    actions.push(PanelAction::RenameNode(node.id.clone(), edit_buf));
+                }
+                state.panels.scene_tree.rename_target = None;
+            }
+            resp.request_focus();
+        } else {
+            let label = format!("{icon} [{}] {}", node.type_name, node.id);
+            let response = ui.selectable_label(selected, label);
+            if response.clicked() {
+                state.panels.scene_tree.selected_node = Some(node.id.clone());
+            }
+            if response.secondary_clicked() {
+                state.panels.scene_tree.context_menu = Some((
+                    node.id.clone(),
+                    response.hover_pos().unwrap_or(egui::pos2(0.0, 0.0)),
+                ));
+            }
+            if response.drag_started() {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(egui::Id::new("drag_node_id"), node.id.clone());
+                });
+            }
         }
     });
     for child_id in children_of(scene, &node.id) {
@@ -170,6 +214,12 @@ impl Panel for SceneTreePanel {
         });
 
         if let Some((ref node_id, pos)) = state.panels.scene_tree.context_menu.take() {
+            let is_attach = state
+                .panels
+                .scene_tree
+                .attach_lua_target
+                .as_deref()
+                == Some(node_id.as_str());
             egui::Area::new("node_context_menu".into())
                 .fixed_pos(pos)
                 .show(ui.ctx(), |ui| {
@@ -180,8 +230,43 @@ impl Panel for SceneTreePanel {
                         if ui.button("Duplicate").clicked() {
                             actions.push(PanelAction::DuplicateNode(node_id.clone()));
                         }
-                        if ui.button("Delete").clicked() {
-                            actions.push(PanelAction::DeleteNode(node_id.clone()));
+                        if ui.button("Rename...").clicked() {
+                            state.panels.scene_tree.rename_target = Some(node_id.clone());
+                        }
+                        if is_attach {
+                            ui.separator();
+                            ui.label("Select Lua file:");
+                            let lua_files = find_lua_files(&state.project.as_ref().map(|p| p.root.clone()));
+                            for lf in &lua_files {
+                                let display = lf
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| lf.to_string_lossy().to_string());
+                                if ui.button(&display).clicked() {
+                                    actions.push(PanelAction::SetLuaClass(
+                                        node_id.clone(),
+                                        lf.to_string_lossy().to_string(),
+                                    ));
+                                    state.panels.scene_tree.attach_lua_target = None;
+                                }
+                            }
+                            if lua_files.is_empty() {
+                                ui.label("No .lua files found");
+                            }
+                            if ui.button("Back").clicked() {
+                                state.panels.scene_tree.attach_lua_target = None;
+                            }
+                        } else {
+                            if ui.button("Attach Lua").clicked() {
+                                state.panels.scene_tree.attach_lua_target =
+                                    Some(node_id.clone());
+                            }
+                        }
+                        if !is_attach {
+                            ui.separator();
+                            if ui.button("Delete").clicked() {
+                                actions.push(PanelAction::DeleteNode(node_id.clone()));
+                            }
                         }
                     });
                 });
