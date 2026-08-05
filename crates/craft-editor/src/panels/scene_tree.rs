@@ -118,9 +118,7 @@ fn draw_subtree(
         if is_rename {
             let mut edit_buf = node.id.clone();
             let resp = ui.text_edit_singleline(&mut edit_buf);
-            if resp.lost_focus()
-                || ui.input(|i| i.key_pressed(egui::Key::Enter))
-            {
+            if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 if !edit_buf.is_empty() && edit_buf != node.id {
                     actions.push(PanelAction::RenameNode(node.id.clone(), edit_buf));
                 }
@@ -214,12 +212,8 @@ impl Panel for SceneTreePanel {
         });
 
         if let Some((ref node_id, pos)) = state.panels.scene_tree.context_menu.take() {
-            let is_attach = state
-                .panels
-                .scene_tree
-                .attach_lua_target
-                .as_deref()
-                == Some(node_id.as_str());
+            let is_attach =
+                state.panels.scene_tree.attach_lua_target.as_deref() == Some(node_id.as_str());
             egui::Area::new("node_context_menu".into())
                 .fixed_pos(pos)
                 .show(ui.ctx(), |ui| {
@@ -236,7 +230,8 @@ impl Panel for SceneTreePanel {
                         if is_attach {
                             ui.separator();
                             ui.label("Select Lua file:");
-                            let lua_files = find_lua_files(&state.project.as_ref().map(|p| p.root.clone()));
+                            let lua_files =
+                                find_lua_files(&state.project.as_ref().map(|p| p.root.clone()));
                             for lf in &lua_files {
                                 let display = lf
                                     .file_name()
@@ -258,8 +253,7 @@ impl Panel for SceneTreePanel {
                             }
                         } else {
                             if ui.button("Attach Lua").clicked() {
-                                state.panels.scene_tree.attach_lua_target =
-                                    Some(node_id.clone());
+                                state.panels.scene_tree.attach_lua_target = Some(node_id.clone());
                             }
                         }
                         if !is_attach {

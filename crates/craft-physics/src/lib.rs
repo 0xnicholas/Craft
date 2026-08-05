@@ -131,9 +131,7 @@ mod tests {
 
     use super::*;
     use craft_kernel::engine::Engine;
-    use craft_kernel::scene::{
-        Component, ComponentKind, ComponentValue, Node, Scene,
-    };
+    use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
 
     fn test_node(id: &str, type_name: &str, comps: &[(&str, ComponentValue)]) -> Node {
         let mut components = BTreeMap::new();
@@ -208,11 +206,9 @@ mod tests {
         let signal_id = engine.bus.declare("collide");
         let hit_count = Rc::new(RefCell::new(0u32));
         let hit_count_clone = hit_count.clone();
-        engine
-            .bus
-            .subscribe(signal_id, move |_| {
-                *hit_count_clone.borrow_mut() += 1;
-            });
+        engine.bus.subscribe(signal_id, move |_| {
+            *hit_count_clone.borrow_mut() += 1;
+        });
 
         let scene = Scene {
             kind: "scene".to_string(),
@@ -240,11 +236,7 @@ mod tests {
 
         engine.load_scene(scene);
         engine.tick();
-        assert_eq!(
-            *hit_count.borrow(),
-            0,
-            "signal fires next tick (ADR 0003)"
-        );
+        assert_eq!(*hit_count.borrow(), 0, "signal fires next tick (ADR 0003)");
 
         engine.tick();
         assert_eq!(*hit_count.borrow(), 1, "collision signal delivered");
@@ -256,11 +248,9 @@ mod tests {
         let signal_id = engine.bus.declare("collide");
         let hit_count = Rc::new(RefCell::new(0u32));
         let hit_count_clone = hit_count.clone();
-        engine
-            .bus
-            .subscribe(signal_id, move |_| {
-                *hit_count_clone.borrow_mut() += 1;
-            });
+        engine.bus.subscribe(signal_id, move |_| {
+            *hit_count_clone.borrow_mut() += 1;
+        });
 
         let scene = Scene {
             kind: "scene".to_string(),

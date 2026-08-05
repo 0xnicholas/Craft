@@ -1,8 +1,8 @@
 use craft_kernel::craft_node;
 
-pub use craft_physics;
-pub use craft_particles;
 pub use craft_audio;
+pub use craft_particles;
+pub use craft_physics;
 
 craft_node!(Spawner, {
     components: {

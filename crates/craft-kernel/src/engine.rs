@@ -658,10 +658,7 @@ mod tests {
         };
         engine.load_scene(scene);
 
-        engine.queue_signal(
-            "hit",
-            serde_json::json!({"a": "a", "b": "nonexistent"}),
-        );
+        engine.queue_signal("hit", serde_json::json!({"a": "a", "b": "nonexistent"}));
         engine.tick();
         engine.tick();
 

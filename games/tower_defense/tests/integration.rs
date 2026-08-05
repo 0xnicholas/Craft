@@ -337,38 +337,63 @@ fn physics_collision_kills_enemies_before_lifetime_expires() {
 
 #[test]
 fn minimal_physics_collision_in_scene() {
+    use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
     use std::cell::RefCell;
     use std::rc::Rc;
-    use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
 
     fn make_node(id: &str, ty: &str, comps: Vec<(&str, ComponentValue)>) -> Node {
         let mut map = std::collections::BTreeMap::new();
         for (k, v) in comps {
-            map.insert(k.to_string(), Component { value: v, kind: ComponentKind::Regular });
+            map.insert(
+                k.to_string(),
+                Component {
+                    value: v,
+                    kind: ComponentKind::Regular,
+                },
+            );
         }
-        Node { id: id.to_string(), type_name: ty.to_string(), parent: None, components: map, behaviors: vec![], active_state: None, lua_class: None, destroyed: false }
+        Node {
+            id: id.to_string(),
+            type_name: ty.to_string(),
+            parent: None,
+            components: map,
+            behaviors: vec![],
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        }
     }
 
     let mut engine = craft_kernel::Engine::new();
     let collide_count = Rc::new(RefCell::new(0u32));
     let cc = collide_count.clone();
     let sid = engine.bus.declare("collide");
-    engine.bus.subscribe(sid, move |_| { *cc.borrow_mut() += 1; });
+    engine.bus.subscribe(sid, move |_| {
+        *cc.borrow_mut() += 1;
+    });
 
     let scene = Scene {
         kind: "scene".to_string(),
         name: "minimal".to_string(),
         nodes: vec![
-            make_node("a", "Test", vec![
-                ("position", ComponentValue::Vec2([0.0, 0.0])),
-                ("velocity", ComponentValue::Vec2([0.5, 0.0])),
-                ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
-            ]),
-            make_node("b", "Test", vec![
-                ("position", ComponentValue::Vec2([5.0, 0.0])),
-                ("velocity", ComponentValue::Vec2([-0.5, 0.0])),
-                ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
-            ]),
+            make_node(
+                "a",
+                "Test",
+                vec![
+                    ("position", ComponentValue::Vec2([0.0, 0.0])),
+                    ("velocity", ComponentValue::Vec2([0.5, 0.0])),
+                    ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
+                ],
+            ),
+            make_node(
+                "b",
+                "Test",
+                vec![
+                    ("position", ComponentValue::Vec2([5.0, 0.0])),
+                    ("velocity", ComponentValue::Vec2([-0.5, 0.0])),
+                    ("hitbox", ComponentValue::Vec2([1.0, 1.0])),
+                ],
+            ),
         ],
         spawn_counter: 0,
     };
@@ -379,5 +404,8 @@ fn minimal_physics_collision_in_scene() {
     }
 
     let hits = *collide_count.borrow();
-    assert!(hits > 0, "two nodes heading toward each other with hitboxes must collide. Got {hits} hits in 10 ticks");
+    assert!(
+        hits > 0,
+        "two nodes heading toward each other with hitboxes must collide. Got {hits} hits in 10 ticks"
+    );
 }

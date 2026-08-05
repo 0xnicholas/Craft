@@ -44,9 +44,7 @@ impl TextureCache {
     }
 
     pub fn get(&self, path: &str) -> Option<&GpuTexture> {
-        self.textures
-            .get(path)
-            .or(self.placeholder.as_ref())
+        self.textures.get(path).or(self.placeholder.as_ref())
     }
 
     pub fn init_placeholder(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {

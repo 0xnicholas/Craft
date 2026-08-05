@@ -322,21 +322,21 @@ impl Render for GpuRenderer {
                 .iter()
                 .filter_map(|(tid, indices)| {
                     self.texture_cache.get(tid).map(|tex| {
-                    let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("texture bind group"),
-                        layout: &self.texture_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(&tex.view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&tex.sampler),
-                            },
-                        ],
-                    });
-                    (indices.clone(), bg)
+                        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("texture bind group"),
+                            layout: &self.texture_bind_group_layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: wgpu::BindingResource::TextureView(&tex.view),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::Sampler(&tex.sampler),
+                                },
+                            ],
+                        });
+                        (indices.clone(), bg)
                     })
                 })
                 .collect();
@@ -447,9 +447,10 @@ pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineR
                 target.exit();
             }
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput {
-                    event: key_event, ..
-                },
+                event:
+                    WindowEvent::KeyboardInput {
+                        event: key_event, ..
+                    },
                 ..
             } => {
                 use winit::keyboard::{KeyCode, PhysicalKey};

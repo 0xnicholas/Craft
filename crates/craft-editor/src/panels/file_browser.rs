@@ -148,12 +148,7 @@ impl Panel for FileBrowserPanel {
 
         if let Some((ref path, is_dir, pos)) = state.panels.file_browser.context_menu.take() {
             let path = path.clone();
-            let show_new_types = state
-                .panels
-                .file_browser
-                .new_file_parent
-                .as_ref()
-                == Some(&path);
+            let show_new_types = state.panels.file_browser.new_file_parent.as_ref() == Some(&path);
             egui::Area::new("file_context_menu".into())
                 .fixed_pos(pos)
                 .show(ui.ctx(), |ui| {
@@ -196,8 +191,7 @@ impl Panel for FileBrowserPanel {
                                 }
                             } else {
                                 if ui.button("New File").clicked() {
-                                    state.panels.file_browser.new_file_parent =
-                                        Some(path.clone());
+                                    state.panels.file_browser.new_file_parent = Some(path.clone());
                                 }
                                 if ui.button("New Folder").clicked() {
                                     actions.push(PanelAction::NewFolder(path.clone()));

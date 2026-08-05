@@ -302,9 +302,11 @@ mod tests {
             .filter(|n| n.type_name == "Particle")
             .collect();
         assert_eq!(particles.len(), 4, "first burst: 4 particles");
-        assert!(particles
-            .iter()
-            .all(|p| p.components.contains_key("velocity")));
+        assert!(
+            particles
+                .iter()
+                .all(|p| p.components.contains_key("velocity"))
+        );
     }
 
     #[test]

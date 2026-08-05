@@ -88,7 +88,9 @@ fn collision_detected_during_gameplay() {
     let collide_count = Rc::new(RefCell::new(0u32));
     let cc = collide_count.clone();
     let cid = engine.bus.declare("collide");
-    engine.bus.subscribe(cid, move |_| { *cc.borrow_mut() += 1; });
+    engine.bus.subscribe(cid, move |_| {
+        *cc.borrow_mut() += 1;
+    });
 
     for _ in 0..50 {
         engine.tick();
