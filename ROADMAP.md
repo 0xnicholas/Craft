@@ -1,12 +1,14 @@
 # Roadmap
 
-**Status**: v1 + v1.5 complete. Tagged `v0.1.0`.
+**Status**: v1 + v1.5 + v2 editor + v3 GPU/physics/particles/audio complete. Tagged `v0.1.0` and `v0.2.0`.
 
 - M1–M10 (v1 engine core + reference game): all 10 milestones closed
 - L1–L3 (v1.5 Lua scripting): VM + bindings, class lifecycle, determinism + module loader all closed
-- 346 tests passing; clippy/fmt clean; coverage gate in place
+- E1–E4 (v2 editor): shell + panels, behavior/Lua editing + LSP, Agent Copilot, UX polish all closed
+- v3.0–v3.2 (GPU, physics, particles, audio) + dungeon crawler: shipped in `v0.2.0`
+- 501 tests passing; clippy/fmt clean; coverage gate in place
 
-**One outstanding item** (per `v0.1.0` tag notes): reproducible 3/4 benchmark runs requires an LLM API key and is deferred from `v0.1.0` cut.
+**One outstanding item**: reproducible LLM-driven benchmark runs require an API key; the 4 tasks pass with the stub backend and the live-run verification is deferred from the `v0.2.0` cut.
 
 ## v1: Engine Core + Reference Game
 
@@ -72,16 +74,26 @@ Desktop editor built with egui/eframe, embedded engine. Separate crate (`craft-e
 | **E3** | Agent Copilot | `craft-editor` | 0019 | ✅ done | `tests/e3_*.rs` (4) | Sidebar chat panel; context injection; agent tools (lint, dry_run, explain, read_scene, read_node); diff review flow (preview/accept/reject); reqwest-based LLM backend; `explain_node` kernel primitive |
 | **E4** | UX polish | `craft-editor` | 0018 (Appx B) | ✅ done | `tests/e4_*.rs` (2) | Keyboard shortcuts (Ctrl+Z/Shift+Z undo/redo, Ctrl+1-5 panel focus, Ctrl+Shift+A add child); context menus (scene tree + file browser); drag-drop (reparent, file→node lua_class); UndoRedo command-pattern module (100 steps); visual design language (Craft dark theme + node type emoji icons) |
 
+## v3: GPU + Physics + Particles + Audio
+
+Shipped in `v0.2.0` (2026-07-19). Design: `docs/superpowers/specs/2026-07-17-v3-gpu-rendering-design.md`.
+
+| Area | Crate(s) | Status | Acceptance |
+|------|----------|--------|------------|
+| **GPU rendering (v3.0)** | `craft-gpu` | ✅ done | wgpu + winit 2D sprite renderer; instanced batching; texture caching; camera transforms; `Vec3`/`Rect` component values; universal component allowlist (`velocity`, `hitbox`, `hitbox_radius`); `SpriteDrawCommand` extraction; `Camera2D` node type (position/zoom/follow); editor F5 launches the game window as a subprocess |
+| **Physics (v3.1)** | `craft-physics` | ✅ done | `craft_system!(PhysicsSystem, PreTick)`; velocity integration; AABB/circle collision; targeted `collide` signal `{a, b}`; `SystemContext` scene + pending-signals access; signal bus API (`emit_by_name`, `pending_signal_names`, `deliver_and_collect`) |
+| **Particles (v3.1)** | `craft-particles` | ✅ done | `craft_system!(ParticleSystem, PostTick)`; `ParticleEmitter` nodes spawn `Particle` children; radial velocity; lifetime fade; auto-cleanup |
+| **Audio (v3.2)** | `craft-audio` | ✅ done | `craft_system!(AudioSystem, PostTick)`; signal-triggered WAV/OGG playback via rodio; auto-discovers `assets/<signal>.wav` |
+| **Dungeon crawler** | `games/dungeon_crawler` | ✅ done | Turn-based roguelike; Lua enemy AI; physics combat; health potions; exit stairs; 6 integration tests |
+
 ## Beyond v2
 
 Explicitly deferred to future versions:
 
 | Feature | When | Notes |
 |---------|------|-------|
-| 2D sprite/GPU rendering | v3 | `RenderCapabilities::SPRITE` on a new backend crate |
 | 3D mesh rendering | v3+ | `RenderCapabilities::MESH` |
-| Physics (collision/rigid body) | v3 | Separate crate, server pattern |
-| Audio | v3 | Separate crate, trait-based backend |
+| Rigid-body physics | v3+ | Extends `craft-physics` beyond AABB/circle |
 | Multiplayer/networking | v3+ | Replication protocol, server-client split |
 | Visual behavior tools (state machine graph) | v3 | Overlays on existing JSON behavior data |
 | Mobile/web platform targets | v3+ | Requires platform abstraction layer |
@@ -91,6 +103,9 @@ Explicitly deferred to future versions:
 ## Related Documents
 
 - `docs/ARCHITECTURE.md` — system design overview
+- `docs/AGENT_GUIDE.md` — how LLM agents use the Craft SDK
+- `docs/SCHEMA.md` — JSON Schema reference
 - `docs/adr/0001-0019.md` — 15 architecture decision records
 - `docs/superpowers/specs/2026-07-09-craft-prd.md` — product requirements
+- `docs/superpowers/specs/2026-07-17-v3-gpu-rendering-design.md` — v3 GPU design
 - `AGENTS.md` — behavioral guidelines for AI agents

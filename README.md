@@ -41,18 +41,18 @@ TypeScript SDK + NAPI              egui desktop app + embedded engine
          (JSON Schema from Rust types)
 ```
 
+Satellite crates built against `craft-kernel`: `craft-gpu` (wgpu sprite rendering, implements `Render`), `craft-physics` (AABB/circle collision system), `craft-particles` (emitter system), `craft-audio` (signal-triggered playback), `craft-eval` (agent benchmark harness).
+
 ## Project Structure
 
 ```
 docs/
 ├── ARCHITECTURE.md              # Overarching system design
+├── AGENT_GUIDE.md               # How LLM agents use the Craft SDK
 ├── CHANGELOG.md                 # Per-release notes (v0.1.0+)
-├── superpowers/specs/
-│   └── 2026-07-09-craft-prd.md  # Product requirements
-└── adr/
-    ├── 0001-0010.md + 0015.md   # Engine core architecture (v1)
-    ├── 0016.md                  # Lua scripting
-    └── 0017-0019.md             # Editor architecture + panels + Copilot (v2)
+├── SCHEMA.md                    # JSON Schema reference (scenes, behaviors, ...)
+├── superpowers/specs/           # Design specs (PRD, editor E1-E4, v3 GPU)
+└── adr/                         # 15 ADRs (0001-0019): engine, Lua, editor
 
 crates/
 ├── craft-kernel/                # Engine core (scene, signal, behavior, ...)
@@ -63,10 +63,15 @@ crates/
 ├── craft-terminal/              # ANSI renderer (NullRenderer for tests)
 ├── craft-lua/                   # Lua 5.4 via mlua (VM, bindings, hooks)
 ├── craft-eval/                  # Benchmark harness (LLM-driven agent tasks)
-└── (craft-editor/ planned v2)
+├── craft-editor/                # egui desktop editor (E1-E4 shipped)
+├── craft-gpu/                   # wgpu + winit 2D sprite renderer
+├── craft-physics/               # AABB/circle collision system
+├── craft-particles/             # Particle emitter system
+└── craft-audio/                 # Signal-triggered playback (rodio)
 
 games/
-└── tower_defense/               # Reference game (v1)
+├── tower_defense/               # Reference game (v1)
+└── dungeon_crawler/             # Turn-based roguelike (v0.2.0)
 ```
 
 Compared to Godot
@@ -77,8 +82,8 @@ Compared to Godot
 | Deep OOP class hierarchy (1,811 GDCLASS registrations) | Single `Node` struct; types differ by component keys |
 | ClassDB + Variant + MethodBind runtime reflection | Compile-time JSON Schema generation |
 | GDScript (custom language, 30 files) | Lua 5.4 via mlua (standard, 30yr ecosystem) |
-| RenderingServer (100+ methods, Vulkan/Metal/D3D12) | Render trait (4 methods, ANSI terminal) |
-| Editor (333K lines, custom GUI toolkit) | egui desktop app (v2, ~15K lines) |
+| RenderingServer (100+ methods, Vulkan/Metal/D3D12) | Render trait (ANSI terminal + wgpu sprites) |
+| Editor (333K lines, custom GUI toolkit) | egui desktop app (v2, shipped) |
 | Multi-platform windowing (93K lines) | Node.js process (NAPI host) |
 | 69 third-party C/C++ libraries | ~10 Rust crate dependencies (mlua, schemars, serde, ...) |
 | No built-in replay | Deterministic recording + hash-verified replay |
@@ -90,6 +95,8 @@ Documentation
 | Document | Purpose |
 |----------|---------|
 | `docs/ARCHITECTURE.md` | System overview, crate DAG, key patterns, Godot comparison |
+| `docs/AGENT_GUIDE.md` | How LLM agents use the Craft SDK (nodes, behaviors, signals, Lua, physics, ...) |
+| `docs/SCHEMA.md` | JSON Schema reference for scenes, behaviors, signals, systems |
 | `docs/superpowers/specs/...-prd.md` | Product requirements, v1 goals, success criteria |
 | `docs/CHANGELOG.md` | Per-release notes |
 | `docs/adr/0001-0010.md + 0015.md` | Engine core: node model, behavior runtime, schema, replay, bridge, error handling, testing, performance |
@@ -99,17 +106,21 @@ Documentation
 Status
 ------
 
-**`v0.4.0` shipped — v1 engine + v1.5 Lua scripting + v2 Editor complete.** See `docs/CHANGELOG.md`.
+**`v0.2.0` shipped — v1 engine + v1.5 Lua scripting + v2 Editor + v3 GPU/physics/particles/audio.** See `docs/CHANGELOG.md`.
 
 - [x] Product requirements (PRD)
-- [x] Architecture decision records (16 ADRs)
+- [x] Architecture decision records (15 ADRs)
 - [x] Overarching system design (`docs/ARCHITECTURE.md`)
 - [x] Engine core implementation: 10 milestones (M1–M10)
-- [x] Reference game: tower defense (1000 ticks, replayable)
+- [x] Reference game: tower defense (1000 ticks, replayable, physics-based combat)
 - [x] Lua scripting: L1 (VM + bindings), L2 (class lifecycle), L3 (determinism + modules)
 - [x] Editor (v2): E1 (shell + panels), E2 (behavior + Lua editing + LSP), E3 (Agent Copilot + LLM tools), E4 (undo/redo + shortcuts + context menus + drag-drop + visual design)
-- [x] Test infrastructure (468 tests; 4-layer pyramid per ADR 0010)
-- [ ] LLM-driven agent benchmarks — reproducible 3/4 runs deferred (requires API key)
+- [x] GPU rendering (v3.0): `craft-gpu` wgpu sprites, instanced batching, texture caching, `Camera2D` (position/zoom/follow)
+- [x] Physics + particles (v3.1): `craft-physics` AABB/circle collision + targeted `collide` signals; `craft-particles` emitters
+- [x] Audio (v3.2): `craft-audio` signal-triggered playback via rodio
+- [x] Dungeon crawler: turn-based roguelike with Lua enemy AI (6 integration tests)
+- [x] Test infrastructure (501 tests; 4-layer pyramid per ADR 0010)
+- [x] Agent benchmarks: 4/4 tasks pass (stub backend); reproducible LLM-driven runs still deferred (requires API key)
 
 ### Quick Start
 
