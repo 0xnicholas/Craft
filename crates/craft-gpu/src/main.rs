@@ -23,6 +23,9 @@ fn main() {
                 .join("assets")
         });
 
+    // SAFETY: single-threaded startup, before any other env reads (ADR 0015).
+    unsafe { std::env::set_var("CRAFT_ASSET_ROOT", &asset_root) };
+
     let config = craft_gpu::GameWindowConfig {
         title: "Craft Game".into(),
         width: 960,

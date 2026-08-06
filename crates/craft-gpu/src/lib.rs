@@ -1,6 +1,7 @@
 mod shaders;
 mod texture;
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -11,8 +12,11 @@ use craft_kernel::render::{
     self, CameraInfo, ComponentView, Render, RenderCapabilities, SpriteDrawCommand, Viewport,
 };
 use craft_kernel::{Engine, EngineConfig, Scene};
+use craft_lua::{LuaEngineHook, LuaRuntime};
 use texture::TextureCache;
 use winit::window::Window;
+
+pub use craft_physics;
 
 pub struct GameWindowConfig {
     pub title: String,
@@ -404,6 +408,45 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
 
 #[allow(deprecated)]
+pub fn build_lua_hook(
+    scene: &Scene,
+    scripts_dir: &Path,
+    seed: u64,
+) -> Result<LuaEngineHook, String> {
+    let mut runtime = LuaRuntime::new(seed).map_err(|e| format!("lua runtime: {e}"))?;
+    if scripts_dir.is_dir() {
+        let mut names: Vec<String> = fs::read_dir(scripts_dir)
+            .map_err(|e| format!("read scripts dir: {e}"))?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("lua"))
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        names.sort();
+        for name in names {
+            let class_name = name.strip_suffix(".lua").unwrap_or(&name).to_string();
+            let source = fs::read_to_string(scripts_dir.join(&name))
+                .map_err(|e| format!("read {name}: {e}"))?;
+            runtime
+                .load_class(&class_name, &source)
+                .map_err(|e| format!("load_class({class_name}): {e}"))?;
+        }
+    }
+    let mut hook = LuaEngineHook::new(runtime);
+    for node in &scene.nodes {
+        if let Some(class) = &node.lua_class {
+            hook.runtime_mut()
+                .bind_node(scene, &node.id, class)
+                .map_err(|e| format!("bind_node({}, {class}): {e}", node.id))?;
+        }
+    }
+    Ok(hook)
+}
+
+// winit 0.30 deprecates EventLoop::create_window/run in favour of the
+// ApplicationHandler trait; the migration is a dedicated task, not part
+// of the Lua wiring work.
+#[allow(deprecated)]
 pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineResult<()> {
     let event_loop = EventLoop::new().map_err(|e| {
         craft_kernel::error::EngineError::Internal(format!("failed to create event loop: {e}"))
@@ -427,8 +470,15 @@ pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineR
         tick_hz: config.tick_hz,
     });
     let scene = Scene::load(scene_path, &engine.nodes)?;
+    let scripts_dir = scene_path
+        .parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("scripts");
+    let hook = build_lua_hook(&scene, &scripts_dir, config.seed)
+        .map_err(craft_kernel::error::EngineError::Internal)?;
     engine.load_scene(scene);
     engine.set_renderer(Box::new(gpu));
+    engine.set_hook(Some(Box::new(hook)));
     engine.enable_rendering(true);
 
     let tick_duration = Duration::from_secs_f64(1.0 / config.tick_hz as f64);

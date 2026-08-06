@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 craft-kernel = { path = "../craft-kernel" }
+craft-lua = { path = "../craft-lua" }
+craft-physics = { path = "../craft-physics" }
 wgpu = "0.20"
 winit = "0.30"
 image = "0.25"
