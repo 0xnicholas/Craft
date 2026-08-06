@@ -10,3 +10,6 @@ craft-kernel = { path = "../craft-kernel" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+craft-physics = { path = "../craft-physics" }

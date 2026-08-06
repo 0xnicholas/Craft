@@ -1299,6 +1299,7 @@ name = "craft-replay"
 version = "0.1.0"
 dependencies = [
  "craft-kernel",
+ "craft-physics",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
