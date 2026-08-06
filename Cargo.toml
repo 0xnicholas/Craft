@@ -15,6 +15,7 @@ members = [
     "crates/craft-animation",
     "crates/craft-particles",
     "crates/craft-audio",
+    "crates/craft-assets",
     "games/tower_defense",
     "games/dungeon_crawler",
     "games/platformer",

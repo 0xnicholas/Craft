@@ -1176,6 +1176,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-assets"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "craft-audio"
 version = "0.1.0"
 dependencies = [

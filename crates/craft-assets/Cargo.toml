@@ -1,0 +1,14 @@
+[package]
+name = "craft-assets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+image = "0.25"
+
+[dev-dependencies]
