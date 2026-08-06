@@ -136,5 +136,7 @@
     "state:enter:s1",
     "state:exit:s1",
     "state:enter:s2"
-  ]
+  ],
+  "full_game": null,
+  "reference": null
 }

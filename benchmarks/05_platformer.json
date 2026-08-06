@@ -1,0 +1,1917 @@
+{
+  "name": "05_platformer",
+  "description": "Build a playable platformer for the Craft engine: a player who runs right (input direction), can jump (input action), lands on solid tiles, and wins by touching the goal node. The win is recorded by setting the player node's `won` component to true (e.g. via a Lua on_signal handler for the physics `collide` signal whose payload is {a, b}).",
+  "seed": 7,
+  "ticks": 300,
+  "scene": {
+    "kind": "scene",
+    "name": "placeholder",
+    "nodes": [],
+    "spawn_counter": 0
+  },
+  "actions_per_tick": [],
+  "expected_final_hash": 7400848608224424186,
+  "expected_components": {},
+  "expected_signals_emitted": [],
+  "full_game": {
+    "description": "A 2D platformer, one level. The scene must contain: an `__input` node (type Input, components direction: [0,0] Vec2 and action: false Bool — the engine overwrites them each tick); a `player` node with position/velocity/hitbox ([0.4, 0.4] half-extents) components and a `won` Bool component; a `level` node with a `tilemap` String component pointing at a res:// asset (a {width, height, tiles} grid; 1 = solid) and a `tile_size` Float component; a `goal` node with position and hitbox. The player must be controllable: horizontal velocity from input direction, gravity pulling down, a jump that lifts off the ground when action is pressed while grounded, landing on solid tiles (PhysicsSystem resolves against the tilemap). On touching the goal, set player.won = true. Deterministic Lua only.",
+    "ticks": 300,
+    "input_script": [
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": true
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      },
+      {
+        "dx": 1.0,
+        "action": false
+      }
+    ],
+    "expected_components": {
+      "player": {
+        "won": {
+          "type": "Bool",
+          "value": true
+        }
+      }
+    }
+  },
+  "reference": {
+    "scene": {
+      "kind": "scene",
+      "name": "platformer",
+      "nodes": [
+        {
+          "id": "__input",
+          "type": "Input",
+          "components": {
+            "action": {
+              "type": "Bool",
+              "value": false
+            },
+            "direction": {
+              "type": "Vec2",
+              "value": [
+                0.0,
+                0.0
+              ]
+            }
+          },
+          "behaviors": []
+        },
+        {
+          "id": "player",
+          "type": "Player",
+          "components": {
+            "grounded": {
+              "type": "Bool",
+              "value": false
+            },
+            "hitbox": {
+              "type": "Vec2",
+              "value": [
+                0.4,
+                0.4
+              ]
+            },
+            "position": {
+              "type": "Vec2",
+              "value": [
+                2.0,
+                1.5
+              ]
+            },
+            "velocity": {
+              "type": "Vec2",
+              "value": [
+                0.0,
+                0.0
+              ]
+            },
+            "won": {
+              "type": "Bool",
+              "value": false
+            }
+          },
+          "behaviors": [],
+          "lua_class": "player_controller"
+        },
+        {
+          "id": "level",
+          "type": "Level",
+          "components": {
+            "tile_size": {
+              "type": "Float",
+              "value": 1.0
+            },
+            "tilemap": {
+              "type": "String",
+              "value": "res://levels/level1.json"
+            }
+          },
+          "behaviors": []
+        },
+        {
+          "id": "goal",
+          "type": "Goal",
+          "components": {
+            "hitbox": {
+              "type": "Vec2",
+              "value": [
+                0.5,
+                0.5
+              ]
+            },
+            "position": {
+              "type": "Vec2",
+              "value": [
+                44.0,
+                10.5
+              ]
+            }
+          },
+          "behaviors": []
+        }
+      ],
+      "spawn_counter": 0
+    },
+    "scripts": {
+      "player_controller.lua": "player_controller = player_controller or {}\nplayer_controller.__index = player_controller\n\nfunction player_controller.new(node)\n    return setmetatable({ node = node }, player_controller)\nend\n\nlocal GRAVITY = 0.2\nlocal MAX_FALL = 8.0\nlocal RUN_SPEED = 0.2\nlocal JUMP_VELOCITY = -1.1\n\nfunction player_controller:on_tick()\n    local me = self.node\n    local input = engine.get_node(\"__input\")\n    local dir = input.direction\n    local vel = me.velocity\n\n    local grounded = vel[2] == 0.0\n\n    vel[2] = vel[2] + GRAVITY\n    if vel[2] > MAX_FALL then\n        vel[2] = MAX_FALL\n    end\n\n    vel[1] = dir[1] * RUN_SPEED\n\n    if input.action and grounded then\n        vel[2] = JUMP_VELOCITY\n    end\n\n    me.grounded = grounded\n    me.velocity = vel\nend\n\nfunction player_controller:on_signal(signal_name, args)\n    if signal_name == \"collide\" then\n        local me = self.node\n        if args.a == \"goal\" or args.b == \"goal\" then\n            me.won = true\n        end\n    end\nend\n"
+    },
+    "assets": {
+      "res://levels/level1.json": {
+        "height": 12,
+        "tiles": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "width": 48
+      }
+    }
+  }
+}

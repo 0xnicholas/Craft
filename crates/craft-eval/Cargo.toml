@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 craft-kernel = { path = "../craft-kernel" }
+craft-lua = { path = "../craft-lua" }
+craft-physics = { path = "../craft-physics" }
 craft-replay = { path = "../craft-replay" }
 serde = { workspace = true }
 serde_json = { workspace = true }

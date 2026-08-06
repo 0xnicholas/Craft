@@ -6,6 +6,9 @@ use serde_json::Value;
 use craft_kernel::behavior::Action;
 use craft_kernel::scene::{ComponentValue, NodeRegistry};
 use craft_kernel::{Engine, Scene};
+use craft_lua::{LuaEngineHook, LuaRuntime};
+
+pub use craft_physics;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkSpec {
@@ -19,6 +22,16 @@ pub struct BenchmarkSpec {
     pub expected_components: BTreeMap<String, BTreeMap<String, ComponentValue>>,
     #[serde(default)]
     pub expected_signals_emitted: Vec<String>,
+    /// Full-game task: the agent authors the whole game (scene + Lua
+    /// scripts + assets) and a scripted playthrough must satisfy the win
+    /// condition. The micro-task fields above are ignored when set.
+    #[serde(default)]
+    pub full_game: Option<FullGameSpec>,
+    /// Reference solution for CI. When the backend is deterministic
+    /// (stub) and the agent response fails to parse, the run falls back
+    /// to this — the shipped game IS the stub's answer.
+    #[serde(default)]
+    pub reference: Option<GameDeliverable>,
 }
 
 impl BenchmarkSpec {
@@ -29,6 +42,35 @@ impl BenchmarkSpec {
     pub fn to_json(&self) -> Result<String, String> {
         serde_json::to_string_pretty(self).map_err(|e| format!("serialize benchmark: {e}"))
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputStep {
+    pub dx: f64,
+    #[serde(default)]
+    pub action: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullGameSpec {
+    pub description: String,
+    pub ticks: u64,
+    /// One entry per tick; length must be >= ticks.
+    pub input_script: Vec<InputStep>,
+    /// Win condition: components that must hold on the named nodes after
+    /// the scripted run.
+    pub expected_components: BTreeMap<String, BTreeMap<String, ComponentValue>>,
+}
+
+/// The agent's deliverable for a full-game task: the game as data.
+/// Script keys are `<class_name>.lua`; asset keys are `res://` URIs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameDeliverable {
+    pub scene: Scene,
+    #[serde(default)]
+    pub scripts: BTreeMap<String, String>,
+    #[serde(default)]
+    pub assets: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +86,9 @@ pub struct Report {
     pub unexpected_signals: Vec<String>,
     pub ticks_run: u64,
     pub duration_micros: u128,
+    /// Human-readable failure context (e.g. deliverable parse errors).
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 impl Report {
@@ -170,6 +215,9 @@ pub fn run_benchmark(
     backend: &dyn Backend,
 ) -> Report {
     let start = std::time::Instant::now();
+    if let Some(fg) = &spec.full_game {
+        return run_full_game(spec, fg, backend, start);
+    }
     let mut engine = Engine::with_config(craft_kernel::EngineConfig {
         seed: spec.seed,
         tick_hz: 60,
@@ -220,30 +268,8 @@ pub fn run_benchmark(
     let final_hash = engine.state_hash();
     let hash_match = final_hash == spec.expected_final_hash;
 
-    let mut component_match = BTreeMap::new();
-    let mut components_failing = Vec::new();
-    if let Some(scene) = engine.scene.as_ref() {
-        for (node_id, expected_components) in &spec.expected_components {
-            let entry = component_match
-                .entry(node_id.clone())
-                .or_insert_with(BTreeMap::new);
-            let actual_node = scene.nodes.iter().find(|n| &n.id == node_id);
-            for (key, expected_value) in expected_components {
-                let actual_value = actual_node
-                    .and_then(|n| n.components.get(key))
-                    .map(|c| &c.value);
-                let matches = actual_value.map(|v| v == expected_value).unwrap_or(false);
-                entry.insert(key.clone(), serde_json::json!({
-                    "expected": expected_value,
-                    "actual": actual_value.map(|v| serde_json::to_value(v).unwrap_or(Value::Null)).unwrap_or(Value::Null),
-                    "matches": matches,
-                }));
-                if !matches {
-                    components_failing.push(format!("{node_id}.{key}"));
-                }
-            }
-        }
-    }
+    let (component_match, components_failing) =
+        check_expected_components(engine.scene.as_ref(), &spec.expected_components);
 
     let expected_signals: std::collections::BTreeSet<String> =
         spec.expected_signals_emitted.iter().cloned().collect();
@@ -275,11 +301,182 @@ pub fn run_benchmark(
         unexpected_signals: unexpected,
         ticks_run: spec.ticks,
         duration_micros: start.elapsed().as_micros(),
+        note: None,
     }
+}
+
+fn check_expected_components(
+    scene: Option<&craft_kernel::scene::Scene>,
+    expected: &BTreeMap<String, BTreeMap<String, ComponentValue>>,
+) -> (BTreeMap<String, BTreeMap<String, Value>>, Vec<String>) {
+    let mut component_match = BTreeMap::new();
+    let mut components_failing = Vec::new();
+    if let Some(scene) = scene {
+        for (node_id, expected_components) in expected {
+            let entry = component_match
+                .entry(node_id.clone())
+                .or_insert_with(BTreeMap::new);
+            let actual_node = scene.nodes.iter().find(|n| &n.id == node_id);
+            for (key, expected_value) in expected_components {
+                let actual_value = actual_node
+                    .and_then(|n| n.components.get(key))
+                    .map(|c| &c.value);
+                let matches = actual_value.map(|v| v == expected_value).unwrap_or(false);
+                entry.insert(key.clone(), serde_json::json!({
+                    "expected": expected_value,
+                    "actual": actual_value.map(|v| serde_json::to_value(v).unwrap_or(Value::Null)).unwrap_or(Value::Null),
+                    "matches": matches,
+                }));
+                if !matches {
+                    components_failing.push(format!("{node_id}.{key}"));
+                }
+            }
+        }
+    }
+    (component_match, components_failing)
+}
+
+/// Run a full-game task: the agent's deliverable is loaded into a fresh
+/// engine (assets registered, Lua classes bound by `lua_class`), driven
+/// by the scripted input, and the win condition is checked.
+fn run_full_game(
+    spec: &BenchmarkSpec,
+    fg: &FullGameSpec,
+    backend: &dyn Backend,
+    start: std::time::Instant,
+) -> Report {
+    let fail = |note: String| Report {
+        name: spec.name.clone(),
+        passed: false,
+        final_hash: 0,
+        expected_hash: 0,
+        hash_match: false,
+        component_match: BTreeMap::new(),
+        components_failing: vec![],
+        missing_signals: vec![],
+        unexpected_signals: vec![],
+        ticks_run: 0,
+        duration_micros: start.elapsed().as_micros(),
+        note: Some(note),
+    };
+
+    if fg.input_script.len() < fg.ticks as usize {
+        return fail(format!(
+            "input_script has {} steps but ticks is {}",
+            fg.input_script.len(),
+            fg.ticks
+        ));
+    }
+
+    let response = backend.complete(&spec.prompt());
+    let deliverable = match serde_json::from_str::<GameDeliverable>(&response) {
+        Ok(d) => d,
+        Err(_) if backend.is_deterministic() => match &spec.reference {
+            Some(r) => r.clone(),
+            None => return fail("agent response did not parse as a game deliverable".to_string()),
+        },
+        Err(e) => {
+            return fail(format!(
+                "agent response did not parse as a game deliverable: {e}; response: {}",
+                response.chars().take(120).collect::<String>()
+            ));
+        }
+    };
+
+    let mut engine = Engine::with_config(craft_kernel::EngineConfig {
+        seed: spec.seed,
+        tick_hz: 60,
+    });
+    engine.set_renderer(Box::new(craft_kernel::NullRenderer::new()));
+    for (uri, data) in &deliverable.assets {
+        engine.resources.register(uri.clone(), data.clone());
+    }
+    engine.load_scene(deliverable.scene.clone());
+
+    let runtime = match LuaRuntime::new(spec.seed) {
+        Ok(r) => r,
+        Err(e) => return fail(format!("lua runtime: {e}")),
+    };
+    let mut hook = LuaEngineHook::new(runtime);
+    for (script_name, source) in &deliverable.scripts {
+        let class_name = script_name.strip_suffix(".lua").unwrap_or(script_name);
+        if let Err(e) = hook.runtime_mut().load_class(class_name, source) {
+            return fail(format!("load_class({class_name}): {e}"));
+        }
+    }
+    let scene = engine.scene().expect("scene loaded").clone();
+    for node in &scene.nodes {
+        if let Some(class) = &node.lua_class {
+            if let Err(e) = hook.runtime_mut().bind_node(&scene, &node.id, class) {
+                return fail(format!("bind_node({}, {class}): {e}", node.id));
+            }
+        }
+    }
+    engine.set_hook(Some(Box::new(hook)));
+
+    for step in fg.input_script.iter().take(fg.ticks as usize) {
+        engine.set_input_direction(step.dx, 0.0);
+        engine.set_input_action(step.action);
+        engine.tick();
+    }
+
+    let (component_match, components_failing) =
+        check_expected_components(engine.scene(), &fg.expected_components);
+
+    Report {
+        name: spec.name.clone(),
+        passed: components_failing.is_empty(),
+        final_hash: engine.state_hash(),
+        expected_hash: 0,
+        hash_match: true,
+        component_match,
+        components_failing,
+        missing_signals: vec![],
+        unexpected_signals: vec![],
+        ticks_run: fg.ticks,
+        duration_micros: start.elapsed().as_micros(),
+        note: None,
+    }
+}
+
+fn full_game_prompt(spec: &FullGameSpec) -> String {
+    format!(
+        "You are building a complete game for the Craft engine.\n\n\
+         ## Game spec\n{}\n\n\
+         ## Deliverable format\n\
+         Return ONLY a JSON object with three keys:\n\
+         - \"scene\": a Craft scene object (\"kind\": \"scene\", nodes with id/type/components/lua_class)\n\
+         - \"scripts\": object mapping \"<class_name>.lua\" to Lua source. Available API:\n\
+           engine.get_node(id) with field syntax (node.position, node.velocity, node.hitbox, ...),\n\
+           engine.emit / engine.spawn / engine.rng / engine.log. Classes define\n\
+           function Class.new(node), Class:on_tick(), Class:on_signal(signal_name, args).\n\
+         - \"assets\": object mapping \"res://...\" URIs to JSON values — e.g. the tilemap grid\n\
+           {{\"width\": W, \"height\": H, \"tiles\": [0/1 ...]}} referenced by a node's \"tilemap\"\n\
+           component (\"tile_size\" component on the same node).\n\n\
+         ## Engine rules\n\
+         - PhysicsSystem runs PreTick: nodes with \"velocity\" (Vec2) and \"hitbox\" (Vec2\n\
+           half-extents) integrate position and resolve against the level's solid tiles\n\
+           (tile 1 = solid; out of bounds is solid except above the level).\n\
+         - The scene must contain an \"__input\" node with \"direction\" (Vec2) and \"action\"\n\
+           (bool) components; the engine overwrites them from the input script every tick.\n\
+         - Nodes with \"lua_class\" get a bound Lua instance; on_tick runs every tick after\n\
+           physics, on_signal receives engine signals (payload like {{a=..., b=...}}).\n\
+         - Deterministic only: no io/os/math.random; use engine.rng.\n\n\
+         ## Win condition\n\
+         After {} ticks of the input script, these components must hold:\n\
+         {}\n\
+         (Typically the player node's \"won\" component set when touching the goal.)",
+        spec.description,
+        spec.ticks,
+        serde_json::to_string_pretty(&spec.expected_components).unwrap_or_default(),
+    )
 }
 
 impl BenchmarkSpec {
     pub fn prompt(&self) -> String {
+        if let Some(fg) = &self.full_game {
+            return full_game_prompt(fg);
+        }
         let mut out = String::new();
         out.push_str("Given the following Craft scene, predict the exact sequence of actions that will execute per tick to achieve the expected final component values.\n\n");
         out.push_str(&format!("## Scene: {}\n", self.name));
@@ -390,6 +587,8 @@ mod tests {
             expected_final_hash: expected_hash,
             expected_components: BTreeMap::new(),
             expected_signals_emitted: Vec::new(),
+            full_game: None,
+            reference: None,
         }
     }
 
@@ -521,11 +720,12 @@ mod tests {
             expected_hash: 0,
             hash_match: true,
             component_match: BTreeMap::new(),
-            components_failing: Vec::new(),
-            missing_signals: Vec::new(),
-            unexpected_signals: Vec::new(),
+            components_failing: vec![],
+            missing_signals: vec![],
+            unexpected_signals: vec![],
             ticks_run: 0,
             duration_micros: 0,
+            note: None,
         };
         let r2 = Report {
             passed: false,
@@ -551,6 +751,7 @@ mod tests {
             unexpected_signals: Vec::new(),
             ticks_run: 1,
             duration_micros: 0,
+            note: None,
         };
         assert_report_passes(&r);
     }
@@ -569,6 +770,7 @@ mod tests {
             unexpected_signals: Vec::new(),
             ticks_run: 1,
             duration_micros: 0,
+            note: None,
         };
         let result = std::panic::catch_unwind(|| assert_report_passes(&r));
         assert!(result.is_err());

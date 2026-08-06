@@ -1217,6 +1217,8 @@ name = "craft-eval"
 version = "0.1.0"
 dependencies = [
  "craft-kernel",
+ "craft-lua",
+ "craft-physics",
  "craft-replay",
  "reqwest",
  "serde",

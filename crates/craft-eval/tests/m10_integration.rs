@@ -215,6 +215,7 @@ fn summary_reports_passed_and_total() {
         unexpected_signals: vec![],
         ticks_run: 1,
         duration_micros: 0,
+        note: None,
     };
     let (p, t) = craft_eval::summary(&[r]);
     assert_eq!(p, 1);
@@ -252,5 +253,73 @@ fn stamp_expected_hash_into_benchmarks() {
     assert!(
         !updated.is_empty(),
         "expected to find at least one benchmark; updated: {updated:?}"
+    );
+}
+
+#[test]
+fn benchmark_5_platformer_passes_with_reference_stub() {
+    let path = benchmarks_dir().join("05_platformer.json");
+    let spec = load_benchmark(&path).expect("load");
+    let backend = craft_eval::StubBackend::deterministic(Default::default());
+    let report = craft_eval::run_benchmark(&spec, &registry(), &backend);
+    assert!(
+        report.passed,
+        "benchmark_5 failed: failing={:?} note={:?}",
+        report.components_failing, report.note
+    );
+    assert_eq!(report.ticks_run, 300);
+}
+
+#[test]
+fn benchmark_5_reference_matches_shipped_platformer() {
+    let path = benchmarks_dir().join("05_platformer.json");
+    let spec = load_benchmark(&path).expect("load");
+    let reference = spec.reference.expect("reference must be embedded");
+
+    let game_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("games/platformer");
+    let scene_file = std::fs::read_to_string(game_dir.join("scene.json")).unwrap();
+    let lua_file = std::fs::read_to_string(game_dir.join("scripts/player_controller.lua")).unwrap();
+    let level_file = std::fs::read_to_string(game_dir.join("assets/levels/level1.json")).unwrap();
+
+    let file_scene: craft_kernel::Scene = serde_json::from_str(&scene_file).unwrap();
+    let ref_scene: serde_json::Value = serde_json::to_value(&reference.scene).unwrap();
+    let file_scene_value: serde_json::Value = serde_json::to_value(&file_scene).unwrap();
+    assert_eq!(
+        ref_scene, file_scene_value,
+        "reference scene drifted from games/platformer/scene.json — regenerate benchmarks/05_platformer.json"
+    );
+    assert_eq!(
+        reference
+            .scripts
+            .get("player_controller.lua")
+            .map(|s| s.as_str()),
+        Some(lua_file.as_str()),
+        "reference lua drifted from games/platformer/scripts/player_controller.lua"
+    );
+    assert_eq!(
+        reference.assets.get("res://levels/level1.json"),
+        Some(&serde_json::from_str(&level_file).unwrap()),
+        "reference level drifted from games/platformer/assets/levels/level1.json"
+    );
+}
+
+#[test]
+fn full_game_deliverable_without_reference_fails_loudly() {
+    let mut spec = load_benchmark(&benchmarks_dir().join("05_platformer.json")).unwrap();
+    spec.reference = None;
+    let backend = craft_eval::StubBackend::deterministic(Default::default());
+    let report = craft_eval::run_benchmark(&spec, &registry(), &backend);
+    assert!(
+        !report.passed,
+        "empty stub response without reference must fail"
+    );
+    assert!(
+        report.note.is_some(),
+        "failure must carry a note explaining the deliverable parse error"
     );
 }

@@ -100,5 +100,7 @@
       }
     }
   },
-  "expected_signals_emitted": []
+  "expected_signals_emitted": [],
+  "full_game": null,
+  "reference": null
 }
