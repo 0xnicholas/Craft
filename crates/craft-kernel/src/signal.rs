@@ -25,6 +25,10 @@ pub struct SignalBus {
     name_by_id: HashMap<SignalId, String>,
     handlers: HashMap<SignalId, Vec<HandlerFn>>,
     pending: Vec<Signal>,
+    /// (name, payload) pairs delivered by the most recent `deliver_pending`
+    /// — the signals PostTick systems (e.g. audio) can observe, including
+    /// signals emitted from Lua.
+    delivered: Vec<(String, Value)>,
 }
 
 impl std::fmt::Debug for SignalBus {
@@ -46,6 +50,7 @@ impl SignalBus {
             name_by_id: HashMap::new(),
             handlers: HashMap::new(),
             pending: Vec::new(),
+            delivered: Vec::new(),
         }
     }
 
@@ -94,28 +99,28 @@ impl SignalBus {
         std::mem::take(&mut self.pending)
     }
 
-    pub fn pending_signal_names(&self) -> Vec<String> {
-        self.pending
-            .iter()
-            .filter_map(|s| self.name_of(s.id).map(String::from))
-            .collect()
-    }
-
     pub fn deliver_pending(&mut self) -> usize {
         let pending = self.drain();
         let count = pending.len();
-        for signal in &pending {
+        let mut delivered = Vec::with_capacity(count);
+        for signal in pending {
+            let name = self.name_of(signal.id).unwrap_or("unknown").to_string();
             if let Some(handlers) = self.handlers.get(&signal.id) {
                 for handler in handlers {
                     handler(&signal.payload);
                 }
             }
+            delivered.push((name, signal.payload));
         }
+        self.delivered = delivered;
         count
     }
 
-    pub fn delivered_names(&self) -> Vec<(String, Value)> {
-        Vec::new()
+    /// The signals delivered by the most recent `deliver_pending` call,
+    /// with their payloads. Systems running after delivery (PostTick)
+    /// observe bus-emitted signals — including Lua `engine.emit` — here.
+    pub fn delivered_payloads(&self) -> &[(String, Value)] {
+        &self.delivered
     }
 
     pub fn deliver_and_collect(&mut self) -> Vec<(String, Value)> {

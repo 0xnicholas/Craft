@@ -7,3 +7,6 @@ license.workspace = true
 [dependencies]
 craft-kernel = { path = "../craft-kernel" }
 rodio = "0.19"
+
+[dev-dependencies]
+craft-lua = { path = "../craft-lua" }

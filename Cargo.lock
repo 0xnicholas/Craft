@@ -1170,6 +1170,7 @@ name = "craft-animation"
 version = "0.1.0"
 dependencies = [
  "craft-kernel",
+ "craft-physics",
  "craft-replay",
  "serde_json",
 ]
@@ -1179,6 +1180,7 @@ name = "craft-audio"
 version = "0.1.0"
 dependencies = [
  "craft-kernel",
+ "craft-lua",
  "rodio",
 ]
 

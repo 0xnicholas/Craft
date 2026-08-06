@@ -10,4 +10,5 @@ craft-kernel = { path = "../craft-kernel" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+craft-physics = { path = "../craft-physics" }
 craft-replay = { path = "../craft-replay" }

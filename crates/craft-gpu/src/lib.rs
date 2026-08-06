@@ -443,9 +443,6 @@ pub fn build_lua_hook(
     Ok(hook)
 }
 
-// winit 0.30 deprecates EventLoop::create_window/run in favour of the
-// ApplicationHandler trait; the migration is a dedicated task, not part
-// of the Lua wiring work.
 #[allow(deprecated)]
 pub fn spawn_game_window(scene_path: &Path, config: GameWindowConfig) -> EngineResult<()> {
     let event_loop = EventLoop::new().map_err(|e| {

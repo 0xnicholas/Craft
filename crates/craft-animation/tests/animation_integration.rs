@@ -1,6 +1,7 @@
 pub use craft_animation;
 use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
 use craft_kernel::{Engine, ResourceRegistry};
+pub use craft_physics;
 use craft_replay::{InputFrame, Recorder, ReplayRunner};
 
 fn anim_node(id: &str, with_animation: bool) -> Node {
@@ -185,4 +186,74 @@ fn animation_replay_is_byte_equal_across_reruns() {
             "rerun #{run} diverged — animation advance must be deterministic (ADR 0006)"
         );
     }
+}
+
+#[test]
+fn animation_and_physics_share_the_tick_deterministically() {
+    use craft_kernel::scene::{Component, ComponentKind, ComponentValue, Node, Scene};
+
+    fn moving_node(id: &str) -> Node {
+        let mut components = std::collections::BTreeMap::new();
+        for (k, v) in [
+            ("position", ComponentValue::Vec2([0.0, 0.0])),
+            ("velocity", ComponentValue::Vec2([0.5, 0.0])),
+            ("hitbox", ComponentValue::Vec2([0.4, 0.4])),
+        ] {
+            components.insert(
+                k.to_string(),
+                Component {
+                    value: v,
+                    kind: ComponentKind::Regular,
+                },
+            );
+        }
+        Node {
+            id: id.to_string(),
+            type_name: "Ball".to_string(),
+            parent: None,
+            components,
+            behaviors: vec![],
+            active_state: None,
+            lua_class: None,
+            destroyed: false,
+        }
+    }
+
+    let scene = Scene {
+        kind: "scene".to_string(),
+        name: "order_test".to_string(),
+        nodes: vec![anim_node("a", true), moving_node("m")],
+        spawn_counter: 0,
+    };
+
+    let run = || {
+        let mut engine = Engine::new();
+        register_animation(&mut engine, 3, 30, true);
+        engine.load_scene(scene.clone());
+        for _ in 0..10 {
+            engine.tick();
+        }
+        let a = engine.scene().unwrap().find_node("a").unwrap().clone();
+        let m = engine.scene().unwrap().find_node("m").unwrap().clone();
+        (
+            match &a.components.get("frame").unwrap().value {
+                ComponentValue::Int(i) => *i,
+                other => panic!("{other:?}"),
+            },
+            match &m.components.get("position").unwrap().value {
+                ComponentValue::Vec2(v) => *v,
+                other => panic!("{other:?}"),
+            },
+        )
+    };
+
+    let (f1, p1) = run();
+    let (f2, p2) = run();
+    assert_eq!(
+        (f1, p1),
+        (f2, p2),
+        "animation+physics ordering must be stable"
+    );
+    assert!(f1 > 0, "animation must have advanced");
+    assert!(p1[0] > 0.0, "physics must have integrated");
 }

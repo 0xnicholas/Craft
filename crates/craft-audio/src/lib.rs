@@ -48,10 +48,12 @@ craft_kernel::craft_system!(AudioSystem, phase: PostTick, {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let pending: Vec<(String, Value)> = ctx.pending_signals.clone();
+    // Bus-delivered signals (including Lua `engine.emit`) from this
+    // tick's delivery pass, with payloads.
+    let delivered: Vec<(String, Value)> = ctx.bus.delivered_payloads().to_vec();
     let mut played: HashSet<String> = HashSet::new();
 
-    for (name, payload) in &pending {
+    for (name, payload) in &delivered {
         if played.contains(name) {
             continue;
         }
