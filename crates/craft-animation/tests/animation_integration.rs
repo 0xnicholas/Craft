@@ -82,14 +82,12 @@ fn frame_of(engine: &Engine, id: &str) -> Option<i64> {
 }
 
 fn sprite_rect_of(engine: &Engine, id: &str) -> Option<[f64; 4]> {
-    engine
-        .scene()
-        .unwrap()
-        .find_node(id)
-        .and_then(|n| match n.components.get("sprite_rect")?.value {
+    engine.scene().unwrap().find_node(id).and_then(|n| {
+        match n.components.get("sprite_rect")?.value {
             ComponentValue::Rect(r) => Some(r),
             _ => None,
-        })
+        }
+    })
 }
 
 #[test]
@@ -120,7 +118,11 @@ fn frames_advance_every_tick_at_60fps_and_loop() {
 fn fps_30_advances_every_second_tick() {
     let mut engine = make_engine(4, 30, true);
     engine.tick();
-    assert_eq!(frame_of(&engine, "a"), Some(0), "first tick still on frame 0");
+    assert_eq!(
+        frame_of(&engine, "a"),
+        Some(0),
+        "first tick still on frame 0"
+    );
     engine.tick();
     assert_eq!(frame_of(&engine, "a"), Some(1));
     engine.tick();
