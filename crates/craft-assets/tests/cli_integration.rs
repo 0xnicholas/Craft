@@ -98,3 +98,56 @@ fn cli_errors_on_invalid_input_without_panicking() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn cli_font_subcommand_emits_font_assets() {
+    let dir = std::env::temp_dir().join(format!("craft-assets-cli-font-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("tmp");
+
+    let run = Command::new(env!("CARGO_BIN_EXE_craft-assets"))
+        .arg("font")
+        .arg(&dir)
+        .output()
+        .expect("cli runs");
+    assert!(
+        run.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let png = std::fs::read(dir.join("font.png")).expect("font.png");
+    let img = image::load_from_memory(&png).expect("decode").to_rgba8();
+    assert_eq!(img.dimensions(), (270, 7), "54 glyphs x 5px");
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("font.json")).expect("font.json"))
+            .expect("json");
+    assert_eq!(meta["glyphs"]["A"], serde_json::json!([0, 0, 5, 7]));
+    assert_eq!(meta["glyphs"]["0"], serde_json::json!([130, 0, 5, 7]));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cli_wav_subcommand_emits_three_tones() {
+    let dir = std::env::temp_dir().join(format!("craft-assets-cli-wav-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("tmp");
+
+    let run = Command::new(env!("CARGO_BIN_EXE_craft-assets"))
+        .arg("wav")
+        .arg(&dir)
+        .output()
+        .expect("cli runs");
+    assert!(
+        run.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    for name in ["jump.wav", "coin.wav", "win.wav"] {
+        let wav = std::fs::read(dir.join(name)).expect(name);
+        assert_eq!(&wav[0..4], b"RIFF", "{name} header");
+        assert_eq!(&wav[8..12], b"WAVE", "{name} format");
+        let data_len = u32::from_le_bytes(wav[40..44].try_into().expect("len"));
+        assert!(data_len > 1000, "{name} has samples");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
