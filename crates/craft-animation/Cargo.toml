@@ -1,0 +1,13 @@
+[package]
+name = "craft-animation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craft-kernel = { path = "../craft-kernel" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+craft-replay = { path = "../craft-replay" }

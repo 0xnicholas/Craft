@@ -1166,6 +1166,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-animation"
+version = "0.1.0"
+dependencies = [
+ "craft-kernel",
+ "craft-replay",
+ "serde_json",
+]
+
+[[package]]
 name = "craft-audio"
 version = "0.1.0"
 dependencies = [

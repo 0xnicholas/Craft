@@ -12,6 +12,7 @@ members = [
     "crates/craft-gpu",
     "crates/craft-eval",
     "crates/craft-physics",
+    "crates/craft-animation",
     "crates/craft-particles",
     "crates/craft-audio",
     "games/tower_defense",
