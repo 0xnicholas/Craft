@@ -12,7 +12,7 @@ Craft v1 has a single rendering target: an ANSI terminal. v2 may add 2D and 3D r
 
 ## Decision
 
-**A 4-method `Render` trait that receives `&[ComponentView]` — a flat list of typed component snapshots.**
+**A 5-method `Render` trait that receives `&[ComponentView]` — a flat list of typed component snapshots. The fifth method, `capabilities()`, is defaulted and ships from v1; it was added to the code before the first GPU backend landed (v0.2.0).**
 
 ```rust
 pub trait Render: Send {
@@ -20,6 +20,8 @@ pub trait Render: Send {
     fn viewport(&self) -> Viewport;
     fn resize(&mut self, viewport: Viewport);
     fn shutdown(&mut self);
+
+    fn capabilities(&self) -> RenderCapabilities { RenderCapabilities::TEXT }
 }
 
 pub struct ComponentView<'a> {
@@ -50,16 +52,16 @@ The trait is defined in `craft-kernel`. `craft-terminal` is the v1 implementatio
 
 | Godot | Craft |
 |-------|-------|
-| `RenderingServer` (abstract, 100+ methods) | `Render` trait (4 methods) |
+| `RenderingServer` (abstract, 100+ methods) | `Render` trait (4 core methods + defaulted `capabilities()`) |
 | `servers/rendering/` (180K lines) | `craft-terminal/` (~300 lines) |
 | Vulkan/Metal/D3D12/GLES3 backends | Single terminal backend |
 | RID-based resource allocation | Not needed — no GPU resources |
 | Draw lists, passes, compositor effects | Raw character grid → ANSI escape codes |
 | Multi-threaded render thread | Single-threaded (v1 invariant) |
 
-## Extension Seam — `RenderCapabilities` for v2
+## Extension Seam — `RenderCapabilities` (shipped, used by `craft-gpu` since v0.2.0)
 
-The 4-method trait will break when v2 adds 2D/3D rendering. To avoid a breaking change, the trait includes a **capability query** from v1:
+The 4 core methods stay stable when 2D/3D rendering arrives. To avoid a breaking change, the trait includes a **capability query** from v1:
 
 ```rust
 pub trait Render: Send {

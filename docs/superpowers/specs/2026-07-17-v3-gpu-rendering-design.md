@@ -1,8 +1,9 @@
 # Craft v3.0-GPU: 2D Sprite/GPU Rendering — Design
 
-**Date**: 2025-07-17
-**Status**: Draft
+**Date**: 2026-07-17
+**Status**: Accepted (shipped in v0.2.0)
 **Supersedes**: ADR 0004 §Extension Seam — adds GPU backend without changing the Render trait
+**Runtime boundary recorded in**: ADR 0020 (editor launches `craft-gpu` as a subprocess)
 
 ## Summary
 
