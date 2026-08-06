@@ -1,0 +1,42 @@
+{
+  "kind": "scene",
+  "name": "platformer",
+  "nodes": [
+    {
+      "id": "__input",
+      "type": "Input",
+      "components": {
+        "direction": [0.0, 0.0],
+        "action": false
+      }
+    },
+    {
+      "id": "player",
+      "type": "Player",
+      "lua_class": "player_controller",
+      "components": {
+        "position": [2.0, 1.5],
+        "velocity": [0.0, 0.0],
+        "hitbox": [0.4, 0.4],
+        "grounded": false,
+        "won": false
+      }
+    },
+    {
+      "id": "level",
+      "type": "Level",
+      "components": {
+        "tilemap": "res://levels/level1.json",
+        "tile_size": 1.0
+      }
+    },
+    {
+      "id": "goal",
+      "type": "Goal",
+      "components": {
+        "position": [44.0, 10.5],
+        "hitbox": [0.5, 0.5]
+      }
+    }
+  ]
+}

@@ -78,21 +78,29 @@ impl LuaRuntime {
     }
 
     pub fn run(&mut self, engine: &mut Engine, script: &str) -> Result<(), ScriptError> {
+        {
+            let mut g = self.run_generation.borrow_mut();
+            *g = g.wrapping_add(1);
+        }
+        self.with_engine_api(engine, |rt, _| rt.vm.load(script).exec())
+    }
+
+    /// Install the `engine.*` globals for the duration of `f`, then tear
+    /// them down. Bound-class hooks (tick_pre_pass / dispatch_signal /
+    /// dispatch_spawn) run through this so `engine.get_node` etc. are
+    /// available in the hot-reload authoring loop, not just in `run()`.
+    fn with_engine_api<F, R>(&mut self, engine: &mut Engine, f: F) -> Result<R, ScriptError>
+    where
+        F: FnOnce(&mut Self, &mut Engine) -> Result<R, ScriptError>,
+    {
         let scene = engine
             .scene_mut()
             .ok_or_else(|| LuaError::external("engine has no scene loaded"))?;
-
-        let generation = {
-            let mut g = self.run_generation.borrow_mut();
-            *g = g.wrapping_add(1);
-            *g
-        };
-
-        let scene_handle = SceneHandle::wrap(scene, generation);
+        let generation = *self.run_generation.borrow();
+        let scene_handle = SceneHandle::wrap_scene(scene, generation);
         let bus_handle = BusHandle::wrap(&mut engine.bus, generation);
         let queries = Rc::clone(&self.queries);
         let rng_state = Rc::clone(&self.rng_state);
-
         self.install_engine_api(
             scene_handle,
             bus_handle,
@@ -102,7 +110,7 @@ impl LuaRuntime {
             Rc::clone(&self.run_generation),
             Rc::clone(&self.determinism),
         )?;
-        let result = self.vm.load(script).exec();
+        let result = f(self, engine);
         let _ = self.uninstall_engine_api();
         result
     }
@@ -275,6 +283,10 @@ impl LuaRuntime {
     /// scene state. The previous `self.node` UserData is overwritten and
     /// will be garbage-collected by Lua.
     pub fn tick_pre_pass(&mut self, engine: &mut Engine) -> Result<(), ScriptError> {
+        self.with_engine_api(engine, |rt, engine| rt.tick_pre_pass_inner(engine))
+    }
+
+    fn tick_pre_pass_inner(&mut self, engine: &mut Engine) -> Result<(), ScriptError> {
         let scene = match engine.scene_mut() {
             Some(s) => s,
             None => return Ok(()),
@@ -321,6 +333,17 @@ impl LuaRuntime {
         signal_name: &str,
         args: &Value,
     ) -> Result<(), ScriptError> {
+        self.with_engine_api(engine, |rt, engine| {
+            rt.dispatch_signal_inner(engine, signal_name, args)
+        })
+    }
+
+    fn dispatch_signal_inner(
+        &mut self,
+        engine: &mut Engine,
+        signal_name: &str,
+        args: &Value,
+    ) -> Result<(), ScriptError> {
         let scene = match engine.scene_mut() {
             Some(s) => s,
             None => return Ok(()),
@@ -359,6 +382,16 @@ impl LuaRuntime {
     /// Fire `on_spawn` for a single bound node. Called by the engine when
     /// a new node enters the scene (e.g. from `engine.spawn`).
     pub fn dispatch_spawn(
+        &mut self,
+        engine: &mut Engine,
+        node_id: &str,
+    ) -> Result<(), ScriptError> {
+        self.with_engine_api(engine, |rt, engine| {
+            rt.dispatch_spawn_inner(engine, node_id)
+        })
+    }
+
+    fn dispatch_spawn_inner(
         &mut self,
         engine: &mut Engine,
         node_id: &str,
@@ -725,13 +758,6 @@ pub struct SceneHandle {
 // pointer is stale and refuse to dereference it. `NodeRef` and the engine
 // globals store this generation alongside the pointer.
 impl SceneHandle {
-    fn wrap(scene: &mut craft_kernel::Scene, generation: u64) -> Self {
-        Self {
-            ptr: scene as *mut craft_kernel::Scene,
-            generation,
-        }
-    }
-
     /// Wrap a shared `&Scene` reference. The raw pointer remains valid only
     /// while the original borrow lives; the caller is responsible for
     /// ensuring the borrow outlives every dereference of the returned handle

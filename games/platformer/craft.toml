@@ -1,0 +1,5 @@
+[project]
+name = "platformer"
+entry_scene = "res://games/platformer/scene.json"
+seed = 7
+tick_hz = 60

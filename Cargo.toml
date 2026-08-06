@@ -16,6 +16,7 @@ members = [
     "crates/craft-audio",
     "games/tower_defense",
     "games/dungeon_crawler",
+    "games/platformer",
 ]
 
 [workspace.package]
